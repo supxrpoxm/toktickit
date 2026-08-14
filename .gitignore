@@ -1,4 +1,15 @@
-# dependencies
+node_modules/
+dist/
+/.env
+*.env
+/.env.local
+.DS_Store
+.idea/
+.vscode/
+coverage/
+client/node_modules/
+server/node_modules/
+/.turbo# dependencies
 node_modules/
 # env & secrets
 .env
