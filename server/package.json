@@ -11,7 +11,9 @@
     "prisma:seed": "tsx prisma/seed.ts",
     "test": "vitest run"
   },
-  "prisma": { "seed": "tsx prisma/seed.ts" },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
   "dependencies": {
     "@prisma/client": "^5.22.0",
     "cors": "^2.8.5",
