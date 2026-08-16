@@ -47,7 +47,10 @@ export default function App() {
       )}
       {state === "error" && (
         <div className="mt-3">
-          <div className="alert alert-danger">Offline — could not reach the TokTickIT API</div>
+          <div className="alert alert-danger">
+    <div className="fw-bold">System Status: Offline</div>
+    <div>Unable to connect to TokTickIT API</div>
+</div>  
         </div>
       )}
     </div>

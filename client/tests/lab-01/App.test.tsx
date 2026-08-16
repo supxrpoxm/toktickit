@@ -36,8 +36,8 @@ describe("App", () => {
     const btn = screen.getByRole("button", { name: /Check System/i });
     await user.click(btn);
 
-    // Online alert
-    const online = await screen.findByText(/Online — TokTickIT API is reachable/i);
+    // อัปเดตข้อความให้ตรงกับ UI ใหม่
+    const online = await screen.findByText(/System Status: Online/i);
     expect(online).toBeInTheDocument();
 
     // Category list items
@@ -56,9 +56,13 @@ describe("App", () => {
     const btn = screen.getByRole("button", { name: /Check System/i });
     await user.click(btn);
 
-    // The App displays an alert with 'Offline' on error
-    const alert = await screen.findByText(/Offline — could not reach the TokTickIT API/i);
+    // อัปเดตข้อความ Error ให้ตรงกับ UI ใหม่
+    const alert = await screen.findByText(/System Status: Offline/i);
     expect(alert).toBeInTheDocument();
+    
+    // เช็กข้อความ Error ด้านล่างด้วยเพื่อความชัวร์
+    const errorMsg = await screen.findByText(/Unable to connect to TokTickIT API/i);
+    expect(errorMsg).toBeInTheDocument();
   });
 
   afterEach(() => {
