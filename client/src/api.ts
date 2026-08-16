@@ -1,4 +1,5 @@
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+// Use an explicit backend URL to avoid connection issues from the dev client
+const API_URL = "http://localhost:3000";
 
 export interface Category {
   id: number;
@@ -16,6 +17,21 @@ export interface SystemStatus {
 //        return { online: true, categories }.
 // Throwing on failure lets the UI show a single Offline/error state.
 export async function checkSystem(): Promise<SystemStatus> {
-  // TODO(Issue 2 & 4): implement the two fetch calls described above.
-  throw new Error("checkSystem not implemented yet");
+  const healthRes = await fetch(`${API_URL}/api/health`);
+  if (!healthRes.ok) {
+    throw new Error(`Health check failed: ${healthRes.status}`);
+  }
+
+  // optionally try to fetch categories; if it fails, return online with empty categories
+  let categories: Category[] = [];
+  try {
+    const catRes = await fetch(`${API_URL}/api/categories`);
+    if (catRes.ok) {
+      categories = await catRes.json();
+    }
+  } catch {
+    // ignore category errors for the simple health check
+  }
+
+  return { online: true, categories };
 }

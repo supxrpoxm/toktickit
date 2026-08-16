@@ -9,7 +9,7 @@ void getPrisma;
 // Supertest can import `app` without opening a port. Do not merge these files.
 export const app = express();
 
-app.use(cors());          // already wired: lets the Vite dev server call this API
+app.use(cors({ origin: true }));          // allow CORS from the dev server and browsers
 app.use(express.json());
 
 // ---------------------------------------------------------------------------
@@ -18,8 +18,8 @@ app.use(express.json());
 // It must return HTTP 200 with JSON: { status: "ok", service: "TokTickIT API" }
 // ---------------------------------------------------------------------------
 app.get("/api/health", (_req: Request, res: Response) => {
-  // TODO(Issue 2): replace this stub with the required 200 response.
-  res.status(501).json({ error: "Not implemented yet" });
+  // Issue 2: return API health information required by tests.
+  res.status(200).json({ status: "ok", service: "TokTickIT API" });
 });
 
 // ---------------------------------------------------------------------------
