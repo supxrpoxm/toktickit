@@ -13,7 +13,38 @@ describe("App", () => {
   // Issue 4 — write these yourself. Hint: mock the api module with
   // vi.spyOn(api, "checkSystem").mockResolvedValue(...) / .mockRejectedValue(...)
   // then click the button and assert the Online list / Offline message.
-  it.todo("shows Online and the seeded categories on success");
+  it("shows Online and the seeded categories on success", async () => {
+    const categories = [
+      { id: 1, name: "Account and Access" },
+      { id: 2, name: "Hardware" },
+      { id: 3, name: "Software" },
+    ];
+
+    // Mock fetch to return successful health then categories
+    let call = 0;
+    vi.stubGlobal("fetch", vi.fn(() => {
+      call += 1;
+      if (call === 1) {
+        return Promise.resolve({ ok: true, json: async () => ({ status: "ok", service: "TokTickIT API" }) });
+      }
+      return Promise.resolve({ ok: true, json: async () => categories });
+    }));
+
+    render(<App />);
+
+    const user = userEvent.setup();
+    const btn = screen.getByRole("button", { name: /Check System/i });
+    await user.click(btn);
+
+    // Online alert
+    const online = await screen.findByText(/Online — TokTickIT API is reachable/i);
+    expect(online).toBeInTheDocument();
+
+    // Category list items
+    for (const c of categories) {
+      expect(screen.getByText(c.name)).toBeInTheDocument();
+    }
+  });
 
   it("shows an Offline error message when the API is unavailable", async () => {
     // mock fetch to simulate network failure
