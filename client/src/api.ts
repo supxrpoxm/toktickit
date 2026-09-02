@@ -6,6 +6,12 @@ export interface Category {
   name: string;
 }
 
+export interface Requester {
+  id: number;
+  name: string;
+  email: string;
+}
+
 export interface SystemStatus {
   online: boolean;
   categories: Category[];
@@ -34,4 +40,13 @@ export async function checkSystem(): Promise<SystemStatus> {
   }
 
   return { online: true, categories };
+}
+
+export async function fetchActiveRequesters(): Promise<Requester[]> {
+  const res = await fetch(`${API_URL}/api/requesters`);
+  if (!res.ok) {
+    throw new Error(`Failed to load active requesters: ${res.status}`);
+  }
+
+  return (await res.json()) as Requester[];
 }
