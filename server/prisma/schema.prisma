@@ -10,18 +10,56 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ---------------------------------------------------------------------------
-// Issue 3 — Create and seed IT request categories
-// Define a Category model with:
-//   id        Int      @id @default(autoincrement())
-//   name      String   @unique
-//   createdAt DateTime @default(now())
-// Then run:  npx prisma migrate dev --name init
-// TODO(Issue 3): add the Category model below.
-// ---------------------------------------------------------------------------
+model Requester {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tickets   Ticket[]
+}
 
 model Category {
   id        Int      @id @default(autoincrement())
   name      String   @unique
   createdAt DateTime @default(now())
+  tickets   Ticket[]
+}
+
+model RelatedSystem {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  tickets   Ticket[]
+}
+
+model Ticket {
+  id              Int            @id @default(autoincrement())
+  title           String
+  description     String
+  status          String         @default("Open")
+  requesterId     Int
+  categoryId      Int
+  relatedSystemId Int?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  requester      Requester      @relation(fields: [requesterId], references: [id])
+  category       Category       @relation(fields: [categoryId], references: [id])
+  relatedSystem  RelatedSystem? @relation(fields: [relatedSystemId], references: [id])
+  attachments    Attachment[]
+}
+
+model Attachment {
+  id        Int       @id @default(autoincrement())
+  ticketId  Int
+  fileName  String
+  mimeType  String?
+  sizeBytes Int?
+  url       String?
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+
+  ticket    Ticket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 }
