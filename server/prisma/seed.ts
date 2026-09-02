@@ -1,19 +1,16 @@
 import { getPrisma } from "../src/prisma.js";
 
-// Issue 3 — seed the four supported categories.
-// The four names are: Account and Access, Hardware, Software, Network.
-// Requirement: running the seed twice must NOT create duplicates.
-// Hint: prisma.category.upsert({ where:{name}, update:{}, create:{name} }).
 async function main() {
   const prisma = getPrisma();
-  const names = [
+
+  const categoryNames = [
     "Account and Access",
     "Hardware",
     "Software",
     "Network",
   ];
 
-  for (const name of names) {
+  for (const name of categoryNames) {
     await prisma.category.upsert({
       where: { name },
       update: {},
@@ -21,12 +18,54 @@ async function main() {
     });
   }
 
-  console.log(`Seeded ${names.length} categories (upsert).`);
+  const relatedSystemNames = [
+    "HR Portal",
+    "Identity Provider",
+    "VPN",
+    "Finance System",
+    "Asset Management",
+    "Email Platform",
+  ];
+
+  for (const name of relatedSystemNames) {
+    await prisma.relatedSystem.upsert({
+      where: { name },
+      update: {},
+      create: { name },
+    });
+  }
+
+  const requesterSeeds = [
+    { name: "Alice Johnson", email: "alice@company.com", isActive: true },
+    { name: "Brandon Lee", email: "brandon@company.com", isActive: true },
+    { name: "Carmen Diaz", email: "carmen@company.com", isActive: true },
+    { name: "Darius Patel", email: "darius@company.com", isActive: true },
+    { name: "Evelyn Gray", email: "evelyn@company.com", isActive: false },
+  ];
+
+  for (const requester of requesterSeeds) {
+    await prisma.requester.upsert({
+      where: { email: requester.email },
+      update: {
+        name: requester.name,
+        isActive: requester.isActive,
+      },
+      create: {
+        name: requester.name,
+        email: requester.email,
+        isActive: requester.isActive,
+      },
+    });
+  }
+
+  console.log(
+    `Seeded ${categoryNames.length} categories, ${relatedSystemNames.length} related systems, and ${requesterSeeds.length} requesters (upsert).`,
+  );
 }
 
 main()
-  .catch((e) => {
-    console.error(e);
+  .catch((error) => {
+    console.error(error);
     process.exit(1);
   })
   .finally(async () => {
