@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { checkSystem, Category } from "./api.js";
+import RequesterSelect from "./RequesterSelect.js";
 
 // UI states you must handle for Issue 4: idle, loading, success, error.
 type UiState = "idle" | "loading" | "success" | "error";
@@ -48,11 +49,15 @@ export default function App() {
       {state === "error" && (
         <div className="mt-3">
           <div className="alert alert-danger">
-    <div className="fw-bold">System Status: Offline</div>
-    <div>Unable to connect to TokTickIT API</div>
-</div>  
+            <div className="fw-bold">System Status: Offline</div>
+            <div>Unable to connect to TokTickIT API</div>
+          </div>
         </div>
       )}
+
+      <div className="mt-4">
+        <RequesterSelect />
+      </div>
     </div>
   );
 }

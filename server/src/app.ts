@@ -42,6 +42,28 @@ app.get("/api/categories", async (_req: Request, res: Response) => {
     res.status(500).json({ error: "Failed to load categories" });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Issue 3 — Active requesters only
+// GET /api/requesters
+//   -> fetch Requester records from PostgreSQL via getPrisma().requester.findMany
+//   -> filter to isActive = true only
+//   -> return { id, name, email } in a predictable sort order
+// ---------------------------------------------------------------------------
+app.get("/api/requesters", async (_req: Request, res: Response) => {
+  try {
+    const prisma = getPrisma();
+    const requesters = await prisma.requester.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, email: true },
+      orderBy: { name: "asc" },
+    });
+
+    res.json(requesters);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to load active requesters" });
+  }
+});
 // ---------------------------------------------------------------------------
 
 export default app;
