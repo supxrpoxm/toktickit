@@ -64,3 +64,30 @@ body {
   font-size: 0.875rem;
   margin-top: 0.35rem;
 }
+
+.btn-zen-primary {
+  background-color: #006B3C;
+  border-color: #006B3C;
+}
+
+.btn-zen-primary:hover,
+.btn-zen-primary:focus,
+.btn-zen-primary:active {
+  background-color: #005a31;
+  border-color: #005a31;
+}
+
+.badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.table thead th {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.card {
+  border-color: rgba(0, 0, 0, 0.04);
+}
