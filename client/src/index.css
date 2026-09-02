@@ -1,0 +1,66 @@
+:root {
+  --zen-green: #006b3c;
+  --zen-green-dark: #005a31;
+  --zen-green-soft: #eaf6ef;
+  --zen-page-bg: #f5f7f6;
+  --zen-border: #dfe7e2;
+  --zen-text: #1f2937;
+  --zen-danger: #dc3545;
+}
+
+body {
+  background-color: var(--zen-page-bg);
+  color: var(--zen-text);
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.zen-page-bg {
+  background-color: var(--zen-page-bg);
+}
+
+.btn-zen-primary {
+  background-color: var(--zen-green);
+  border-color: var(--zen-green);
+  color: #ffffff;
+}
+
+.btn-zen-primary:hover,
+.btn-zen-primary:focus,
+.btn-zen-primary:active {
+  background-color: var(--zen-green-dark);
+  border-color: var(--zen-green-dark);
+  color: #ffffff;
+}
+
+.btn-zen-primary:disabled {
+  background-color: var(--zen-green-dark);
+  border-color: var(--zen-green-dark);
+  opacity: 0.8;
+}
+
+.zen-readonly {
+  background-color: var(--zen-green-soft);
+  border-color: var(--zen-border);
+  color: var(--zen-text);
+  cursor: not-allowed;
+}
+
+.zen-form-control,
+.zen-form-select {
+  border-color: #ced4da;
+  border-radius: 0.5rem;
+  padding: 0.625rem 0.75rem;
+}
+
+.zen-form-control:focus,
+.zen-form-select:focus {
+  border-color: var(--zen-green);
+  box-shadow: 0 0 0 0.2rem rgba(0, 107, 60, 0.15);
+  outline: 0;
+}
+
+.zen-error-text {
+  color: var(--zen-danger);
+  font-size: 0.875rem;
+  margin-top: 0.35rem;
+}
