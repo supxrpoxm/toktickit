@@ -89,3 +89,69 @@ export async function getTickets(req: Request, res: Response) {
     return res.status(500).json({ error: "Failed to load tickets" });
   }
 }
+
+export async function getTicketById(req: Request, res: Response) {
+  try {
+    const ticketId = toSafeNumber(req.params.id);
+    const requesterId = toSafeNumber(req.headers["x-requester-id"]);
+
+    if (!ticketId || !requesterId) {
+      return res.status(403).json({ error: "Forbidden: requesterId is required." });
+    }
+
+    const prisma = getPrisma();
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+      include: {
+        category: true,
+        relatedSystem: true,
+        attachments: true,
+      },
+    });
+
+    if (!ticket) {
+      return res.status(404).json({ error: "Ticket not found" });
+    }
+
+    if (ticket.requesterId !== requesterId) {
+      return res.status(403).json({ error: "Forbidden: you can only access your own tickets." });
+    }
+
+    return res.status(200).json(ticket);
+  } catch (error) {
+    return res.status(500).json({ error: "Failed to load ticket" });
+  }
+}
+
+export async function createTicket(req: Request, res: Response) {
+  try {
+    const requesterId = toSafeNumber(req.body.requesterId);
+    const categoryId = toSafeNumber(req.body.categoryId);
+    const relatedSystemId = req.body.relatedSystemId
+      ? toSafeNumber(req.body.relatedSystemId)
+      : null;
+    const title = typeof req.body.title === "string" ? req.body.title.trim() : "";
+    const description = typeof req.body.description === "string" ? req.body.description.trim() : "";
+
+    if (!requesterId || !categoryId || !title || !description) {
+      return res.status(400).json({
+        error: "requesterId, categoryId, title, and description are required.",
+      });
+    }
+
+    const prisma = getPrisma();
+    const ticket = await prisma.ticket.create({
+      data: {
+        requesterId,
+        categoryId,
+        relatedSystemId,
+        title,
+        description,
+      },
+    });
+
+    return res.status(201).json(ticket);
+  } catch (error) {
+    return res.status(500).json({ error: "Failed to create ticket" });
+  }
+}
