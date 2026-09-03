@@ -1,20 +1,13 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 
 type TicketStatus = "Open" | "In Progress" | "Resolved" | "Closed";
 
 type Ticket = {
-  id: string;
+  id: number | string;
   createdAt: string;
-  summary: string;
+  title: string;
   status: TicketStatus;
 };
-
-const mockTickets: Ticket[] = [
-  { id: "TK-1001", createdAt: "2026-09-01", summary: "Reset access for finance admin", status: "Open" },
-  { id: "TK-1002", createdAt: "2026-08-29", summary: "Laptop replacement request", status: "In Progress" },
-  { id: "TK-1003", createdAt: "2026-08-10", summary: "VPN issue for remote user", status: "Resolved" },
-  { id: "TK-1004", createdAt: "2026-08-02", summary: "New software installation", status: "Closed" },
-];
 
 const badgeClass: Record<TicketStatus, string> = {
   Open: "bg-success-subtle text-success-emphasis",
@@ -27,72 +20,57 @@ export default function MyTickets() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [sortBy, setSortBy] = useState("Date");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [tickets, setTickets] = useState<Ticket[]>(mockTickets);
+  const [page, setPage] = useState(1);
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [totalPages, setTotalPages] = useState(1);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isError, setIsError] = useState(false);
 
-  const filteredTickets = useMemo(() => {
-    let result = [...tickets];
+  useEffect(() => {
+    const abortController = new AbortController();
+    const params = new URLSearchParams();
 
-    if (search.trim()) {
-      result = result.filter((ticket) =>
-        ticket.summary.toLowerCase().includes(search.toLowerCase()) ||
-        ticket.id.toLowerCase().includes(search.toLowerCase())
-      );
+    if (search.trim()) params.set("search", search.trim());
+    if (statusFilter !== "All") params.set("status", statusFilter);
+    params.set("sortBy", sortBy === "Priority" ? "priority" : "createdAt");
+    params.set("page", String(page));
+
+    async function loadTickets() {
+      setIsLoading(true);
+      setIsError(false);
+
+      try {
+        const response = await fetch(`/api/tickets?${params.toString()}`, {
+          headers: {
+            "x-requester-id": "1",
+          },
+          signal: abortController.signal,
+        });
+
+        if (!response.ok) throw new Error("Failed to load tickets");
+
+        const result = await response.json();
+        setTickets(result.tickets ?? []);
+        setTotalPages(Math.max(1, result.pagination?.totalPages ?? 1));
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") {
+          return;
+        }
+
+        setIsError(true);
+        setTickets([]);
+        setTotalPages(1);
+      } finally {
+        if (!abortController.signal.aborted) setIsLoading(false);
+      }
     }
 
-    if (statusFilter !== "All") {
-      result = result.filter((ticket) => ticket.status === statusFilter);
-    }
+    loadTickets();
 
-    if (sortBy === "Date") {
-      result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    } else if (sortBy === "Priority") {
-      const priorityValue: Record<TicketStatus, number> = {
-        Open: 4,
-        "In Progress": 3,
-        Resolved: 2,
-        Closed: 1,
-      };
-      result.sort((a, b) => priorityValue[b.status] - priorityValue[a.status]);
-    }
+    return () => abortController.abort();
+  }, [search, statusFilter, sortBy, page]);
 
-    return result;
-  }, [search, statusFilter, sortBy, tickets]);
-
-  const page = 1;
-  const pageSize = 3;
-  const totalPages = Math.max(1, Math.ceil(filteredTickets.length / pageSize));
-  const pagerItems = Array.from({ length: totalPages }, (_, i) => i + 1);
-
-  const currentPageTickets = filteredTickets.slice((page - 1) * pageSize, page * pageSize);
-
-  const handleLoad = () => {
-    setLoading(true);
-    setError(null);
-    setTimeout(() => {
-      setLoading(false);
-      setTickets(mockTickets);
-    }, 600);
-  };
-
-  const handleError = () => {
-    setLoading(false);
-    setError("Unable to load tickets right now.");
-  };
-
-  const handleEmpty = () => {
-    setLoading(false);
-    setError(null);
-    setTickets([]);
-  };
-
-  const handleNoResults = () => {
-    setLoading(false);
-    setError(null);
-    setTickets(mockTickets);
-    setSearch("zzz-no-match");
-  };
+  const pagerItems = Array.from({ length: totalPages }, (_, index) => index + 1);
 
   return (
     <div className="container py-4">
@@ -142,14 +120,7 @@ export default function MyTickets() {
             </div>
           </div>
 
-          <div className="mb-3 d-flex flex-wrap gap-2">
-            <button className="btn btn-zen-primary" onClick={handleLoad}>Load Data</button>
-            <button className="btn btn-outline-danger" onClick={handleError}>Trigger Error</button>
-            <button className="btn btn-outline-secondary" onClick={handleEmpty}>Empty State</button>
-            <button className="btn btn-outline-info" onClick={handleNoResults}>No Results</button>
-          </div>
-
-          {loading && (
+          {isLoading && (
             <div className="text-center py-5">
               <div className="spinner-border text-success" role="status" style={{ width: 42, height: 42 }}>
                 <span className="visually-hidden">Loading...</span>
@@ -158,27 +129,27 @@ export default function MyTickets() {
             </div>
           )}
 
-          {!loading && error && (
+          {!isLoading && isError && (
             <div className="alert alert-danger" role="alert">
-              {error}
+              Unable to load tickets right now.
             </div>
           )}
 
-          {!loading && !error && tickets.length === 0 && (
+          {!isLoading && !isError && tickets.length === 0 && !search && statusFilter === "All" && (
             <div className="text-center py-5 text-muted">
               <h5 className="mb-2">No tickets yet</h5>
               <p className="mb-0">You do not have any tickets yet. Create a new ticket to get started.</p>
             </div>
           )}
 
-          {!loading && !error && filteredTickets.length === 0 && tickets.length > 0 && (
+          {!isLoading && !isError && tickets.length === 0 && (search.trim() !== "" || statusFilter !== "All") && (
             <div className="text-center py-5 text-muted">
               <h5 className="mb-2">No matching tickets</h5>
               <p className="mb-0">Try adjusting your search or filters.</p>
             </div>
           )}
 
-          {!loading && !error && filteredTickets.length > 0 && (
+          {!isLoading && !isError && tickets.length > 0 && (
             <div className="table-responsive">
               <table className="table table-hover align-middle mb-0">
                 <thead className="table-light">
@@ -190,11 +161,11 @@ export default function MyTickets() {
                   </tr>
                 </thead>
                 <tbody>
-                  {currentPageTickets.map((ticket) => (
+                  {tickets.map((ticket) => (
                     <tr key={ticket.id}>
                       <td className="fw-semibold text-dark">{ticket.id}</td>
                       <td>{ticket.createdAt}</td>
-                      <td>{ticket.summary}</td>
+                      <td>{ticket.title}</td>
                       <td>
                         <span className={`badge rounded-pill ${badgeClass[ticket.status]}`}>
                           {ticket.status}
@@ -207,21 +178,27 @@ export default function MyTickets() {
             </div>
           )}
 
-          {!loading && !error && filteredTickets.length > 0 && (
+          {!isLoading && !isError && tickets.length > 0 && (
             <nav aria-label="Ticket pagination" className="mt-4 d-flex justify-content-center">
               <ul className="pagination mb-0">
                 <li className={`page-item ${page === 1 ? "disabled" : ""}`}>
-                  <button className="page-link" type="button">Previous</button>
+                  <button className="page-link" type="button" onClick={() => setPage(page - 1)} disabled={page === 1}>
+                    Previous
+                  </button>
                 </li>
 
                 {pagerItems.map((item) => (
                   <li key={item} className={`page-item ${item === page ? "active" : ""}`}>
-                    <button className="page-link" type="button">{item}</button>
+                    <button className="page-link" type="button" onClick={() => setPage(item)}>
+                      {item}
+                    </button>
                   </li>
                 ))}
 
                 <li className={`page-item ${page === totalPages ? "disabled" : ""}`}>
-                  <button className="page-link" type="button">Next</button>
+                  <button className="page-link" type="button" onClick={() => setPage(page + 1)} disabled={page === totalPages}>
+                    Next
+                  </button>
                 </li>
               </ul>
             </nav>
