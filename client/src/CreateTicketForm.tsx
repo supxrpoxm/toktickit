@@ -1,5 +1,7 @@
 import React from 'react';
 
+const todayDate = new Date().toISOString().split('T')[0];
+
 export default function CreateTicketForm() {
   return (
     <div className="container mt-4 mb-5">
@@ -7,31 +9,30 @@ export default function CreateTicketForm() {
         <div className="card-header text-white p-3" style={{ backgroundColor: '#006B3C' }}>
           <h4 className="mb-0">Create Ticket</h4>
         </div>
-        
+
         <div className="card-body bg-white p-4">
           <form>
             {/* Read-only Fields */}
             <div className="row mb-4">
               <div className="col-md-6">
                 <label className="form-label fw-bold">Ticket No.</label>
-                <input 
-                  type="text" 
-                  className="form-control" 
-                  value="TKT-2026-1042" 
-                  style={{ backgroundColor: '#EAF6EF' }} 
-                  disabled 
-                  readOnly 
+                <input
+                  type="text"
+                  className="form-control"
+                  value="TKT-2026-1042"
+                  style={{ backgroundColor: '#EAF6EF' }}
+                  disabled
+                  readOnly
                 />
               </div>
               <div className="col-md-6">
                 <label className="form-label fw-bold">Date</label>
-                <input 
-                  type="text" 
-                  className="form-control" 
-                  value="02 Sep 2026" 
-                  style={{ backgroundColor: '#EAF6EF' }} 
-                  disabled 
-                  readOnly 
+                <input
+                  type="text"
+                  className="form-control"
+                  value={todayDate}
+                  style={{ backgroundColor: '#EAF6EF' }}
+                  readOnly
                 />
               </div>
             </div>
@@ -69,7 +70,7 @@ export default function CreateTicketForm() {
               <label className="form-label">Summary <span className="text-danger">*</span></label>
               <input type="text" className="form-control" placeholder="Briefly describe the request" />
             </div>
-            
+
             <div className="mb-4">
               <label className="form-label">Description <span className="text-danger">*</span></label>
               <textarea className="form-control" rows={4} placeholder="Describe the issue, requested change, or business need."></textarea>
@@ -77,9 +78,9 @@ export default function CreateTicketForm() {
 
             {/* Button */}
             <div className="text-end">
-              <button 
-                type="submit" 
-                className="btn px-4 py-2 text-white fw-bold" 
+              <button
+                type="submit"
+                className="btn px-4 py-2 text-white fw-bold"
                 style={{ backgroundColor: '#006B3C', borderColor: '#006B3C' }}
               >
                 Submit Ticket

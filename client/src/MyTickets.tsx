@@ -20,6 +20,7 @@ export default function MyTickets() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [sortBy, setSortBy] = useState("Date");
+  const [currentUserId, setCurrentUserId] = useState<string>("1");
   const [page, setPage] = useState(1);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [totalPages, setTotalPages] = useState(1);
@@ -42,7 +43,7 @@ export default function MyTickets() {
       try {
         const response = await fetch(`/api/tickets?${params.toString()}`, {
           headers: {
-            "x-requester-id": "1",
+            "x-requester-id": currentUserId,
           },
           signal: abortController.signal,
         });
@@ -68,7 +69,7 @@ export default function MyTickets() {
     loadTickets();
 
     return () => abortController.abort();
-  }, [search, statusFilter, sortBy, page]);
+  }, [search, statusFilter, sortBy, page, currentUserId]);
 
   const pagerItems = Array.from({ length: totalPages }, (_, index) => index + 1);
 
@@ -79,6 +80,25 @@ export default function MyTickets() {
           <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
             <div>
               <h3 className="mb-1 fw-bold text-dark">My Tickets</h3>
+            </div>
+
+            <div className="d-flex align-items-center gap-2">
+              <label htmlFor="simulate-user" className="form-label mb-0 text-nowrap">
+                Simulate User
+              </label>
+              <select
+                id="simulate-user"
+                className="form-select"
+                value={currentUserId}
+                onChange={(event) => {
+                  setCurrentUserId(event.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="1">User ID 1</option>
+                <option value="2">User ID 2</option>
+                <option value="3">User ID 3</option>
+              </select>
             </div>
 
             <div className="d-flex flex-column flex-md-row gap-2 align-items-stretch">
