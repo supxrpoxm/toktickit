@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type TicketStatus = "Open" | "In Progress" | "Resolved" | "Closed" | string;
 
@@ -24,6 +24,10 @@ type TicketDetailData = {
 };
 
 type DetailState = "loading" | "success" | "error" | "not-found";
+
+const allowedAttachmentTypes = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+const allowedAttachmentExtensions = [".jpg", ".jpeg", ".png", ".webp", ".pdf"];
+const maxAttachmentSize = 5 * 1024 * 1024;
 
 const statusBadgeClass: Record<string, string> = {
   Open: "text-bg-success",
@@ -53,6 +57,10 @@ type TicketDetailProps = {
 export default function TicketDetail({ ticketId, onBack }: TicketDetailProps) {
   const [ticket, setTicket] = useState<TicketDetailData | null>(null);
   const [state, setState] = useState<DetailState>("loading");
+  const [isUploading, setIsUploading] = useState(false);
+  const [removingAttachmentId, setRemovingAttachmentId] = useState<number | null>(null);
+  const [attachmentError, setAttachmentError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const abortController = new AbortController();
@@ -95,6 +103,114 @@ export default function TicketDetail({ ticketId, onBack }: TicketDetailProps) {
     return () => abortController.abort();
   }, [ticketId]);
 
+  async function handleAttachmentUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    setAttachmentError("");
+
+    if (!files.length || !ticket) return;
+
+    const activeAttachmentCount = (ticket.attachments ?? []).filter(
+      (attachment) => !attachment.deletedAt,
+    ).length;
+
+    if (activeAttachmentCount + files.length > 5) {
+      setAttachmentError("A ticket may have at most 5 active attachments.");
+      event.target.value = "";
+      return;
+    }
+
+    const invalidFile = files.find((file) => {
+      const extension = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+      return !allowedAttachmentTypes.includes(file.type) || !allowedAttachmentExtensions.includes(extension) || file.size > maxAttachmentSize;
+    });
+
+    if (invalidFile) {
+      setAttachmentError("Only JPG, PNG, WEBP, and PDF files up to 5MB each are allowed.");
+      event.target.value = "";
+      return;
+    }
+
+    const formData = new FormData();
+    files.forEach((file) => formData.append("files", file));
+    setIsUploading(true);
+
+    try {
+      const response = await fetch(`/api/tickets/${ticketId}/attachments`, {
+        method: "POST",
+        headers: { "x-requester-id": "1" },
+        body: formData,
+      });
+
+      if (!response.ok) throw new Error("Upload failed");
+
+      const refreshedResponse = await fetch(`/api/tickets/${ticketId}`, {
+        headers: { "x-requester-id": "1" },
+      });
+
+      if (!refreshedResponse.ok) throw new Error("Refresh failed");
+
+      setTicket((await refreshedResponse.json()) as TicketDetailData);
+    } catch (error) {
+      setAttachmentError("Unable to upload attachments right now.");
+    } finally {
+      setIsUploading(false);
+      event.target.value = "";
+    }
+  }
+
+  async function handleAttachmentDownload(attachment: TicketAttachment) {
+    setAttachmentError("");
+
+    try {
+      const response = await fetch(`/api/attachments/${attachment.id}/download`, {
+        headers: { "x-requester-id": "1" },
+      });
+
+      if (!response.ok) throw new Error("Download failed");
+
+      const blob = await response.blob();
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = attachment.fileName;
+      link.click();
+      URL.revokeObjectURL(downloadUrl);
+    } catch (error) {
+      setAttachmentError("Unable to download this attachment.");
+    }
+  }
+
+  async function handleAttachmentRemove(attachmentId: number) {
+    setAttachmentError("");
+    setRemovingAttachmentId(attachmentId);
+
+    try {
+      const response = await fetch(`/api/attachments/${attachmentId}`, {
+        method: "DELETE",
+        headers: { "x-requester-id": "1" },
+      });
+
+      if (!response.ok) throw new Error("Removal failed");
+
+      setTicket((currentTicket) =>
+        currentTicket
+          ? {
+            ...currentTicket,
+            attachments: (currentTicket.attachments ?? []).map((attachment) =>
+              attachment.id === attachmentId
+                ? { ...attachment, deletedAt: new Date().toISOString() }
+                : attachment,
+            ),
+          }
+          : currentTicket,
+      );
+    } catch (error) {
+      setAttachmentError("Unable to remove this attachment right now.");
+    } finally {
+      setRemovingAttachmentId(null);
+    }
+  }
+
   if (state === "loading") {
     return (
       <main className="container py-5" aria-busy="true">
@@ -131,9 +247,7 @@ export default function TicketDetail({ ticketId, onBack }: TicketDetailProps) {
     );
   }
 
-  const activeAttachments = (ticket.attachments ?? []).filter(
-    (attachment) => !attachment.deletedAt,
-  );
+  const attachments = ticket.attachments ?? [];
 
   return (
     <main className="container py-4 py-md-5">
@@ -211,23 +325,78 @@ export default function TicketDetail({ ticketId, onBack }: TicketDetailProps) {
               Attachments
             </h2>
 
-            {activeAttachments.length === 0 ? (
+            <div className="mb-3">
+              <label htmlFor="ticket-attachments" className="form-label small text-muted">
+                Add files (JPG, PNG, WEBP, or PDF; maximum 5MB each)
+              </label>
+              <input
+                ref={fileInputRef}
+                id="ticket-attachments"
+                type="file"
+                className="form-control"
+                accept=".jpg,.jpeg,.png,.webp,.pdf,image/jpeg,image/png,image/webp,application/pdf"
+                multiple
+                disabled={isUploading || attachments.filter((attachment) => !attachment.deletedAt).length >= 5}
+                onChange={handleAttachmentUpload}
+              />
+              {attachmentError && (
+                <div className="alert alert-danger mt-2 mb-0" role="alert">
+                  {attachmentError}
+                </div>
+              )}
+              {isUploading && (
+                <div className="text-success small mt-2" role="status">
+                  <span className="spinner-border spinner-border-sm me-2" aria-hidden="true" />
+                  Uploading attachments...
+                </div>
+              )}
+            </div>
+
+            {attachments.length === 0 ? (
               <div className="border border-2 border-dashed rounded-3 bg-white text-center p-4">
                 <i className="bi bi-paperclip fs-3 text-muted" aria-hidden="true" />
                 <p className="text-muted mb-0 mt-2">No attachments for this ticket.</p>
               </div>
             ) : (
               <div className="list-group">
-                {activeAttachments.map((attachment) => (
+                {attachments.map((attachment) => (
                   <div
-                    className="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2"
+                    className={`list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2 ${attachment.deletedAt ? "bg-body-secondary text-muted" : ""}`}
                     key={attachment.id}
                   >
-                    <span className="fw-semibold text-break">
-                      <i className="bi bi-file-earmark me-2 text-success" aria-hidden="true" />
-                      {attachment.fileName}
-                    </span>
-                    <span className="text-muted small">{formatFileSize(attachment.sizeBytes)}</span>
+                    <div className="d-flex flex-column">
+                      <span className={`fw-semibold text-break ${attachment.deletedAt ? "text-decoration-line-through" : ""}`}>
+                        <i className={`bi ${attachment.deletedAt ? "bi-file-earmark-x" : "bi-file-earmark"} me-2 ${attachment.deletedAt ? "text-secondary" : "text-success"}`} aria-hidden="true" />
+                        {attachment.fileName}
+                      </span>
+                      <span className="small text-muted">
+                        {attachment.mimeType ?? "Type unavailable"} · {formatFileSize(attachment.sizeBytes)}
+                      </span>
+                    </div>
+                    <div className="d-flex align-items-center gap-2">
+                      {attachment.deletedAt ? (
+                        <span className="badge text-bg-secondary">Deleted</span>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-success"
+                            onClick={() => handleAttachmentDownload(attachment)}
+                          >
+                            <i className="bi bi-download me-1" aria-hidden="true" />
+                            Download
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-danger"
+                            onClick={() => handleAttachmentRemove(attachment.id)}
+                            disabled={removingAttachmentId === attachment.id}
+                          >
+                            {removingAttachmentId === attachment.id ? "Removing..." : "Delete"}
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
