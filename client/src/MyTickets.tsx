@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 type TicketStatus = "Open" | "In Progress" | "Resolved" | "Closed";
 
 type Ticket = {
-  id: number | string;
+  id: number;
   createdAt: string;
   title: string;
   status: TicketStatus;
@@ -16,7 +16,11 @@ const badgeClass: Record<TicketStatus, string> = {
   Closed: "bg-secondary-subtle text-secondary-emphasis",
 };
 
-export default function MyTickets() {
+type MyTicketsProps = {
+  onViewDetail: (ticketId: number) => void;
+};
+
+export default function MyTickets({ onViewDetail }: MyTicketsProps) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [sortBy, setSortBy] = useState("createdAt");
@@ -183,8 +187,31 @@ export default function MyTickets() {
                 </thead>
                 <tbody>
                   {tickets.map((ticket) => (
-                    <tr key={ticket.id}>
-                      <td className="fw-semibold text-dark">{ticket.id}</td>
+                    <tr
+                      key={ticket.id}
+                      role="button"
+                      tabIndex={0}
+                      className="ticket-row"
+                      onClick={() => onViewDetail(ticket.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          onViewDetail(ticket.id);
+                        }
+                      }}
+                    >
+                      <td className="fw-semibold">
+                        <button
+                          type="button"
+                          className="btn btn-link p-0 text-primary text-decoration-underline fw-semibold"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onViewDetail(ticket.id);
+                          }}
+                        >
+                          {ticket.id}
+                        </button>
+                      </td>
                       <td>{ticket.createdAt}</td>
                       <td>{ticket.title}</td>
                       <td>
