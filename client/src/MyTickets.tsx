@@ -18,8 +18,8 @@ const badgeClass: Record<TicketStatus, string> = {
 
 export default function MyTickets() {
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
-  const [sortBy, setSortBy] = useState("Date");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [sortBy, setSortBy] = useState("createdAt");
   const [currentUserId, setCurrentUserId] = useState<string>("1");
   const [page, setPage] = useState(1);
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -32,8 +32,8 @@ export default function MyTickets() {
     const params = new URLSearchParams();
 
     if (search.trim()) params.set("search", search.trim());
-    if (statusFilter !== "All") params.set("status", statusFilter);
-    params.set("sortBy", sortBy === "Priority" ? "priority" : "createdAt");
+    if (statusFilter) params.set("status", statusFilter);
+    if (sortBy) params.set("sortBy", sortBy);
     params.set("page", String(page));
 
     async function loadTickets() {
@@ -121,7 +121,7 @@ export default function MyTickets() {
                 onChange={(e) => setStatusFilter(e.target.value)}
                 style={{ minWidth: 150 }}
               >
-                <option value="All">All Status</option>
+                <option value="">All Status</option>
                 <option value="Open">Open</option>
                 <option value="In Progress">In Progress</option>
                 <option value="Resolved">Resolved</option>
@@ -134,8 +134,9 @@ export default function MyTickets() {
                 onChange={(e) => setSortBy(e.target.value)}
                 style={{ minWidth: 150 }}
               >
-                <option value="Date">Sort: Date</option>
-                <option value="Priority">Sort: Priority</option>
+                <option value="createdAt">Sort by Date</option>
+                <option value="title">Sort by Summary</option>
+                <option value="status">Sort by Status</option>
               </select>
             </div>
           </div>
@@ -155,14 +156,14 @@ export default function MyTickets() {
             </div>
           )}
 
-          {!isLoading && !isError && tickets.length === 0 && !search && statusFilter === "All" && (
+          {!isLoading && !isError && tickets.length === 0 && !search && !statusFilter && (
             <div className="text-center py-5 text-muted">
               <h5 className="mb-2">No tickets yet</h5>
               <p className="mb-0">You do not have any tickets yet. Create a new ticket to get started.</p>
             </div>
           )}
 
-          {!isLoading && !isError && tickets.length === 0 && (search.trim() !== "" || statusFilter !== "All") && (
+          {!isLoading && !isError && tickets.length === 0 && (search.trim() !== "" || statusFilter !== "") && (
             <div className="text-center py-5 text-muted">
               <h5 className="mb-2">No matching tickets</h5>
               <p className="mb-0">Try adjusting your search or filters.</p>
