@@ -51,10 +51,11 @@ function formatFileSize(sizeBytes?: number | null) {
 
 type TicketDetailProps = {
   ticketId: number;
+  requesterId: number;
   onBack: () => void;
 };
 
-export default function TicketDetail({ ticketId, onBack }: TicketDetailProps) {
+export default function TicketDetail({ ticketId, requesterId, onBack }: TicketDetailProps) {
   const [ticket, setTicket] = useState<TicketDetailData | null>(null);
   const [state, setState] = useState<DetailState>("loading");
   const [isUploading, setIsUploading] = useState(false);
@@ -72,7 +73,7 @@ export default function TicketDetail({ ticketId, onBack }: TicketDetailProps) {
       try {
         const response = await fetch(`/api/tickets/${ticketId}`, {
           headers: {
-            "x-requester-id": "1",
+            "x-requester-id": String(requesterId),
           },
           signal: abortController.signal,
         });

@@ -34,11 +34,18 @@ model RelatedSystem {
   tickets   Ticket[]
 }
 
+enum Priority {
+  Low
+  Medium
+  High
+}
+
 model Ticket {
   id              Int            @id @default(autoincrement())
   title           String
   description     String
   status          String         @default("Open")
+  priority        Priority       @default(Medium)
   requesterId     Int
   categoryId      Int
   relatedSystemId Int?

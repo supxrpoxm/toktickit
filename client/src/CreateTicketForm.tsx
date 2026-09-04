@@ -93,8 +93,8 @@ export default function CreateTicketForm({ requesterId = 1, onCreated }: CreateT
             {/* Dropdowns */}
             <div className="row mb-4">
               <div className="col-md-4">
-                <label className="form-label">Category <span className="text-danger">*</span></label>
-                <select className="form-select" value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
+                <label htmlFor="ticket-category" className="form-label">Category <span className="text-danger">*</span></label>
+                <select id="ticket-category" className="form-select" value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
                   <option value="">Select category</option>
                   <option value="1">Account and Access</option>
                   <option value="2">Hardware</option>
@@ -103,8 +103,8 @@ export default function CreateTicketForm({ requesterId = 1, onCreated }: CreateT
                 </select>
               </div>
               <div className="col-md-4">
-                <label className="form-label">Related System <span className="text-danger">*</span></label>
-                <select className="form-select" value={relatedSystemId} onChange={(event) => setRelatedSystemId(event.target.value)}>
+                <label htmlFor="ticket-system" className="form-label">Related System <span className="text-danger">*</span></label>
+                <select id="ticket-system" className="form-select" value={relatedSystemId} onChange={(event) => setRelatedSystemId(event.target.value)}>
                   <option value="">Select system</option>
                   <option value="1">HR Portal</option>
                   <option value="2">Identity Provider</option>
@@ -113,8 +113,8 @@ export default function CreateTicketForm({ requesterId = 1, onCreated }: CreateT
                 </select>
               </div>
               <div className="col-md-4">
-                <label className="form-label">Priority <span className="text-danger">*</span></label>
-                <select className="form-select" value={priority} onChange={(event) => setPriority(event.target.value)}>
+                <label htmlFor="ticket-priority" className="form-label">Priority <span className="text-danger">*</span></label>
+                <select id="ticket-priority" className="form-select" value={priority} onChange={(event) => setPriority(event.target.value)}>
                   <option value="">Select priority</option>
                   <option value="High">High</option>
                   <option value="Medium">Medium</option>

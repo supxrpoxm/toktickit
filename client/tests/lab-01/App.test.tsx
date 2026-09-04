@@ -1,71 +1,79 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "../../src/App.js";
 
-describe("App", () => {
-  // WORKED EXAMPLE — provided for you.
-  it("renders the TokTickIT heading", () => {
-    render(<App />);
-    expect(screen.getByText(/TokTickIT/i)).toBeInTheDocument();
-  });
+function mockSuccessfulApi() {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
 
-  // Issue 4 — write these yourself. Hint: mock the api module with
-  // vi.spyOn(api, "checkSystem").mockResolvedValue(...) / .mockRejectedValue(...)
-  // then click the button and assert the Online list / Offline message.
-  it("shows Online and the seeded categories on success", async () => {
-    const categories = [
-      { id: 1, name: "Account and Access" },
-      { id: 2, name: "Hardware" },
-      { id: 3, name: "Software" },
-    ];
-
-    // Mock fetch to return successful health then categories
-    let call = 0;
-    vi.stubGlobal("fetch", vi.fn(() => {
-      call += 1;
-      if (call === 1) {
-        return Promise.resolve({ ok: true, json: async () => ({ status: "ok", service: "TokTickIT API" }) });
+      if (url.includes("/api/requesters")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => [
+            { id: 1, name: "Alice Johnson", email: "alice@company.com" },
+          ],
+        });
       }
-      return Promise.resolve({ ok: true, json: async () => categories });
-    }));
 
-    render(<App />);
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          tickets: [],
+          pagination: { page: 1, limit: 10, total: 0, totalPages: 1 },
+        }),
+      });
+    }),
+  );
+}
 
-    const user = userEvent.setup();
-    const btn = screen.getByRole("button", { name: /Check System/i });
-    await user.click(btn);
-
-    // อัปเดตข้อความให้ตรงกับ UI ใหม่
-    const online = await screen.findByText(/System Status: Online/i);
-    expect(online).toBeInTheDocument();
-
-    // Category list items
-    for (const c of categories) {
-      expect(screen.getByText(c.name)).toBeInTheDocument();
-    }
-  });
-
-  it("shows an Offline error message when the API is unavailable", async () => {
-    // mock fetch to simulate network failure
-    vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("network failure"))));
-
-    render(<App />);
-
-    const user = userEvent.setup();
-    const btn = screen.getByRole("button", { name: /Check System/i });
-    await user.click(btn);
-
-    // อัปเดตข้อความ Error ให้ตรงกับ UI ใหม่
-    const alert = await screen.findByText(/System Status: Offline/i);
-    expect(alert).toBeInTheDocument();
-    
-    // เช็กข้อความ Error ด้านล่างด้วยเพื่อความชัวร์
-    const errorMsg = await screen.findByText(/Unable to connect to TokTickIT API/i);
-    expect(errorMsg).toBeInTheDocument();
-  });
-
+describe("App", () => {
   afterEach(() => {
+    cleanup();
     vi.restoreAllMocks();
+  });
+
+  it("asks for a requester before showing the main app", async () => {
+    mockSuccessfulApi();
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Select Requester" })).toBeInTheDocument();
+    expect(screen.getByText(/TokTickIT/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Alice Johnson/ })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "My Tickets" })).not.toBeInTheDocument();
+  });
+
+  it("shows the empty My Tickets state after a requester is selected", async () => {
+    mockSuccessfulApi();
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /Alice Johnson/ }));
+
+    expect(await screen.findByText("No tickets yet")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "My Tickets" })).toBeInTheDocument();
+  });
+
+  it("navigates to the Create Ticket view", async () => {
+    mockSuccessfulApi();
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /Alice Johnson/ }));
+    await userEvent.click(screen.getByRole("link", { name: /Create Ticket/i }));
+
+    expect(screen.getByRole("heading", { name: "Create Ticket" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Submit Ticket" })).toBeInTheDocument();
+  });
+
+  it("switches requester from the navbar", async () => {
+    mockSuccessfulApi();
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /Alice Johnson/ }));
+    await screen.findByRole("heading", { name: "My Tickets" });
+
+    expect(screen.getByLabelText(/Requester/)).toHaveValue("1");
   });
 });
