@@ -27,9 +27,10 @@ const priorityBadgeClass: Record<TicketPriority, string> = {
 type MyTicketsProps = {
   requesterId: number;
   onViewDetail: (ticketId: number) => void;
+  onCreateTicket?: () => void;
 };
 
-export default function MyTickets({ requesterId, onViewDetail }: MyTicketsProps) {
+export default function MyTickets({ requesterId, onViewDetail, onCreateTicket }: MyTicketsProps) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [sortBy, setSortBy] = useState("createdAt");
@@ -38,6 +39,7 @@ export default function MyTickets({ requesterId, onViewDetail }: MyTicketsProps)
   const [totalPages, setTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [isError, setIsError] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     const abortController = new AbortController();
@@ -81,12 +83,17 @@ export default function MyTickets({ requesterId, onViewDetail }: MyTicketsProps)
     loadTickets();
 
     return () => abortController.abort();
-  }, [search, statusFilter, sortBy, page, requesterId]);
+  }, [search, statusFilter, sortBy, page, requesterId, retryKey]);
 
   const pagerItems = Array.from({ length: totalPages }, (_, index) => index + 1);
 
+  function handleRetry() {
+    setPage(1);
+    setRetryKey((k) => k + 1);
+  }
+
   return (
-    <div className="container py-4">
+    <div className="py-2 my-tickets-wrap">
       <div className="card border-0 shadow-sm rounded-4">
         <div className="card-body p-4">
           <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
@@ -94,8 +101,8 @@ export default function MyTickets({ requesterId, onViewDetail }: MyTicketsProps)
               <h3 className="mb-1 fw-bold text-dark">My Tickets</h3>
             </div>
 
-            <div className="d-flex flex-column flex-md-row gap-2 align-items-stretch">
-              <div className="input-group" style={{ minWidth: 220 }}>
+            <div className="d-flex flex-column flex-md-row gap-2 align-items-stretch w-100 my-tickets-filters" style={{ maxWidth: 720 }}>
+              <div className="input-group w-100" style={{ minWidth: 0 }}>
                 <span className="input-group-text bg-white border-end-0">
                   <i className="bi bi-search" aria-hidden="true" />
                 </span>
@@ -103,16 +110,20 @@ export default function MyTickets({ requesterId, onViewDetail }: MyTicketsProps)
                   type="text"
                   className="form-control border-start-0"
                   placeholder="Search tickets"
+                  aria-label="Search tickets"
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                 />
               </div>
 
+              <label className="visually-hidden" htmlFor="status-filter">Filter by status</label>
               <select
-                className="form-select"
+                id="status-filter"
+                className="form-select w-100"
+                aria-label="Filter by status"
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                style={{ minWidth: 150 }}
+                onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+                style={{ minWidth: 0 }}
               >
                 <option value="">All Status</option>
                 <option value="Open">Open</option>
@@ -121,11 +132,14 @@ export default function MyTickets({ requesterId, onViewDetail }: MyTicketsProps)
                 <option value="Closed">Closed</option>
               </select>
 
+              <label className="visually-hidden" htmlFor="sort-tickets">Sort tickets</label>
               <select
-                className="form-select"
+                id="sort-tickets"
+                className="form-select w-100"
+                aria-label="Sort tickets"
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
-                style={{ minWidth: 150 }}
+                style={{ minWidth: 0 }}
               >
                 <option value="createdAt">Sort by Date</option>
                 <option value="id">Sort by Ticket No</option>
@@ -146,15 +160,23 @@ export default function MyTickets({ requesterId, onViewDetail }: MyTicketsProps)
           )}
 
           {!isLoading && isError && (
-            <div className="alert alert-danger" role="alert">
-              Unable to load tickets right now.
+            <div className="alert alert-danger d-flex flex-column flex-sm-row align-items-sm-center gap-2" role="alert">
+              <span className="text-break">Unable to load tickets right now.</span>
+              <button type="button" className="btn btn-sm btn-outline-danger ms-sm-auto flex-shrink-0" onClick={handleRetry}>
+                Try again
+              </button>
             </div>
           )}
 
           {!isLoading && !isError && tickets.length === 0 && !search && !statusFilter && (
             <div className="text-center py-5 text-muted">
               <h5 className="mb-2">No tickets yet</h5>
-              <p className="mb-0">You do not have any tickets yet. Create a new ticket to get started.</p>
+              <p className="mb-3">You do not have any tickets yet. Create a new ticket to get started.</p>
+              {onCreateTicket && (
+                <button type="button" className="btn btn-zen-primary px-4" onClick={onCreateTicket}>
+                  Create Ticket
+                </button>
+              )}
             </div>
           )}
 
@@ -170,11 +192,11 @@ export default function MyTickets({ requesterId, onViewDetail }: MyTicketsProps)
               <table className="table table-hover align-middle mb-0">
                 <thead className="table-light">
                   <tr>
-                    <th>Ticket No</th>
-                    <th>Summary</th>
-                    <th>Category</th>
-                    <th>Priority</th>
-                    <th>Status</th>
+                    <th scope="col">Ticket No</th>
+                    <th scope="col">Summary</th>
+                    <th scope="col">Category</th>
+                    <th scope="col">Priority</th>
+                    <th scope="col">Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -204,7 +226,7 @@ export default function MyTickets({ requesterId, onViewDetail }: MyTicketsProps)
                           {ticket.id}
                         </button>
                       </td>
-                      <td>{ticket.title}</td>
+                      <td className="text-break" style={{ minWidth: 120 }}>{ticket.title}</td>
                       <td>{(ticket as any).category?.name ?? "—"}</td>
                       <td>
                         <span className={`badge rounded-pill ${priorityBadgeClass[ticket.priority] ?? "bg-secondary-subtle text-secondary-emphasis"}`}>
@@ -225,7 +247,7 @@ export default function MyTickets({ requesterId, onViewDetail }: MyTicketsProps)
 
           {!isLoading && !isError && tickets.length > 0 && (
             <nav aria-label="Ticket pagination" className="mt-4 d-flex justify-content-center">
-              <ul className="pagination mb-0">
+              <ul className="pagination mb-0 flex-wrap justify-content-center">
                 <li className={`page-item ${page === 1 ? "disabled" : ""}`}>
                   <button className="page-link" type="button" onClick={() => setPage(page - 1)} disabled={page === 1}>
                     Previous
@@ -234,7 +256,7 @@ export default function MyTickets({ requesterId, onViewDetail }: MyTicketsProps)
 
                 {pagerItems.map((item) => (
                   <li key={item} className={`page-item ${item === page ? "active" : ""}`}>
-                    <button className="page-link" type="button" onClick={() => setPage(item)}>
+                    <button className="page-link" type="button" onClick={() => setPage(item)} aria-current={item === page ? "page" : undefined}>
                       {item}
                     </button>
                   </li>

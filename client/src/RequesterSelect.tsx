@@ -14,12 +14,13 @@ type RequesterSelectProps = {
 
 export default function RequesterSelect({ requesters, value, onChange }: RequesterSelectProps) {
   return (
-    <div className="d-flex align-items-center">
-      <label htmlFor="requester-select" className="text-white me-2 mb-0 fw-semibold text-nowrap">Requester:</label>
+    <div className="d-flex align-items-center gap-2 requester-select-wrap">
+      <label htmlFor="requester-select" className="text-white mb-0 fw-semibold text-nowrap">Requester:</label>
       <select
         id="requester-select"
+        aria-label="Select requester"
         className="form-select form-select-sm border-0 shadow-sm"
-        style={{ minWidth: '200px' }}
+        style={{ minWidth: 140, maxWidth: '100%' }}
         value={value}
         onChange={(event) => onChange(Number(event.target.value))}
       >
