@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from "react";
 
 type TicketStatus = "Open" | "In Progress" | "Resolved" | "Closed";
+type TicketPriority = "High" | "Medium" | "Low";
 
 type Ticket = {
   id: number;
   createdAt: string;
   title: string;
   status: TicketStatus;
+  priority: TicketPriority;
 };
 
 const badgeClass: Record<TicketStatus, string> = {
@@ -16,15 +18,21 @@ const badgeClass: Record<TicketStatus, string> = {
   Closed: "bg-secondary-subtle text-secondary-emphasis",
 };
 
+const priorityBadgeClass: Record<TicketPriority, string> = {
+  High: "bg-danger-subtle text-danger-emphasis",
+  Medium: "bg-warning-subtle text-warning-emphasis",
+  Low: "bg-success-subtle text-success-emphasis",
+};
+
 type MyTicketsProps = {
+  requesterId: number;
   onViewDetail: (ticketId: number) => void;
 };
 
-export default function MyTickets({ onViewDetail }: MyTicketsProps) {
+export default function MyTickets({ requesterId, onViewDetail }: MyTicketsProps) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [sortBy, setSortBy] = useState("createdAt");
-  const [currentUserId, setCurrentUserId] = useState<string>("1");
   const [page, setPage] = useState(1);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [totalPages, setTotalPages] = useState(1);
@@ -47,7 +55,7 @@ export default function MyTickets({ onViewDetail }: MyTicketsProps) {
       try {
         const response = await fetch(`/api/tickets?${params.toString()}`, {
           headers: {
-            "x-requester-id": currentUserId,
+            "x-requester-id": String(requesterId),
           },
           signal: abortController.signal,
         });
@@ -73,7 +81,7 @@ export default function MyTickets({ onViewDetail }: MyTicketsProps) {
     loadTickets();
 
     return () => abortController.abort();
-  }, [search, statusFilter, sortBy, page, currentUserId]);
+  }, [search, statusFilter, sortBy, page, requesterId]);
 
   const pagerItems = Array.from({ length: totalPages }, (_, index) => index + 1);
 
@@ -84,25 +92,6 @@ export default function MyTickets({ onViewDetail }: MyTicketsProps) {
           <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
             <div>
               <h3 className="mb-1 fw-bold text-dark">My Tickets</h3>
-            </div>
-
-            <div className="d-flex align-items-center gap-2">
-              <label htmlFor="simulate-user" className="form-label mb-0 text-nowrap">
-                Simulate User
-              </label>
-              <select
-                id="simulate-user"
-                className="form-select"
-                value={currentUserId}
-                onChange={(event) => {
-                  setCurrentUserId(event.target.value);
-                  setPage(1);
-                }}
-              >
-                <option value="1">User ID 1</option>
-                <option value="2">User ID 2</option>
-                <option value="3">User ID 3</option>
-              </select>
             </div>
 
             <div className="d-flex flex-column flex-md-row gap-2 align-items-stretch">
@@ -139,8 +128,10 @@ export default function MyTickets({ onViewDetail }: MyTicketsProps) {
                 style={{ minWidth: 150 }}
               >
                 <option value="createdAt">Sort by Date</option>
+                <option value="id">Sort by Ticket No</option>
                 <option value="title">Sort by Summary</option>
                 <option value="status">Sort by Status</option>
+                <option value="priority">Sort by Priority</option>
               </select>
             </div>
           </div>
@@ -180,8 +171,9 @@ export default function MyTickets({ onViewDetail }: MyTicketsProps) {
                 <thead className="table-light">
                   <tr>
                     <th>Ticket No</th>
-                    <th>Creation Date</th>
                     <th>Summary</th>
+                    <th>Category</th>
+                    <th>Priority</th>
                     <th>Status</th>
                   </tr>
                 </thead>
@@ -212,8 +204,13 @@ export default function MyTickets({ onViewDetail }: MyTicketsProps) {
                           {ticket.id}
                         </button>
                       </td>
-                      <td>{ticket.createdAt}</td>
                       <td>{ticket.title}</td>
+                      <td>{(ticket as any).category?.name ?? "—"}</td>
+                      <td>
+                        <span className={`badge rounded-pill ${priorityBadgeClass[ticket.priority] ?? "bg-secondary-subtle text-secondary-emphasis"}`}>
+                          {ticket.priority ?? "—"}
+                        </span>
+                      </td>
                       <td>
                         <span className={`badge rounded-pill ${badgeClass[ticket.status]}`}>
                           {ticket.status}

@@ -69,7 +69,7 @@ export async function getTickets(req: Request, res: Response) {
     const limit = Math.min(50, Math.max(1, toSafeNumber(req.query.limit) ?? 10));
     const skip = (page - 1) * limit;
 
-    const validSortFields = ["createdAt", "status", "title", "priority"];
+    const validSortFields = ["createdAt", "status", "title", "priority", "id"];
     const safeSortBy = validSortFields.includes(sortBy) ? sortBy : "createdAt";
 
     const where: any = {
@@ -100,10 +100,11 @@ export async function getTickets(req: Request, res: Response) {
           title: true,
           description: true,
           status: true,
+          priority: true,
           createdAt: true,
           requesterId: true,
           category: {
-            select: { name: true },
+            select: { id: true, name: true },
           },
         },
       }),
@@ -166,6 +167,9 @@ export async function createTicket(req: Request, res: Response) {
       : null;
     const title = typeof req.body.title === "string" ? req.body.title.trim() : "";
     const description = typeof req.body.description === "string" ? req.body.description.trim() : "";
+    const allowedPriorities = ["High", "Medium", "Low"] as const;
+    type PriorityInput = (typeof allowedPriorities)[number];
+    const priority: PriorityInput = allowedPriorities.includes(req.body.priority) ? req.body.priority : "Medium";
 
     if (!requesterId || !categoryId || !title || !description) {
       return res.status(400).json({
@@ -181,6 +185,7 @@ export async function createTicket(req: Request, res: Response) {
         relatedSystemId,
         title,
         description,
+        priority,
       },
     });
 
