@@ -1,48 +1,92 @@
 :root {
   --zen-green: #006b3c;
+  --zen-green-secondary: #0b7a46;
   --zen-green-dark: #005a31;
   --zen-green-soft: #eaf6ef;
   --zen-page-bg: #f5f7f6;
   --zen-border: #dfe7e2;
   --zen-text: #1f2937;
   --zen-danger: #dc3545;
+  --zen-warning-bg: #fff3cd;
+  --zen-warning-text: #664d03;
+}
+
+html {
+  box-sizing: border-box;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: inherit;
 }
 
 body {
   background-color: var(--zen-page-bg);
   color: var(--zen-text);
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  overflow-x: hidden;
+  margin: 0;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
 }
 
 .zen-page-bg {
   background-color: var(--zen-page-bg);
 }
 
+.zen-text-primary {
+  color: var(--zen-green) !important;
+}
+
+/* ---------- Buttons: Zen Green hierarchy ---------- */
 .btn-zen-primary {
-  background-color: var(--zen-green);
-  border-color: var(--zen-green);
+  background-color: #006b3c;
+  border-color: #006b3c;
   color: #ffffff;
 }
 
 .btn-zen-primary:hover,
 .btn-zen-primary:focus,
 .btn-zen-primary:active {
-  background-color: var(--zen-green-dark);
-  border-color: var(--zen-green-dark);
+  background-color: #005a31;
+  border-color: #005a31;
   color: #ffffff;
 }
 
-.btn-zen-primary:disabled {
-  background-color: var(--zen-green-dark);
-  border-color: var(--zen-green-dark);
-  opacity: 0.8;
+.btn-zen-primary:disabled,
+.btn-zen-primary.disabled {
+  background-color: #6c757d;
+  border-color: #6c757d;
+  color: #ffffff;
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 
-.zen-readonly {
+/* Secondary Zen outline button */
+.btn-zen-secondary {
+  border-color: var(--zen-green);
+  color: var(--zen-green);
+  background-color: #ffffff;
+}
+
+.btn-zen-secondary:hover,
+.btn-zen-secondary:focus {
   background-color: var(--zen-green-soft);
-  border-color: var(--zen-border);
-  color: var(--zen-text);
+  border-color: var(--zen-green-dark);
+  color: var(--zen-green-dark);
+}
+
+/* ---------- Forms ---------- */
+.zen-readonly {
+  background-color: var(--zen-green-soft) !important;
+  border-color: var(--zen-border) !important;
+  color: var(--zen-text) !important;
   cursor: not-allowed;
+  opacity: 1;
 }
 
 .zen-form-control,
@@ -52,42 +96,222 @@ body {
   padding: 0.625rem 0.75rem;
 }
 
+/* Apply Zen focus to both custom and plain Bootstrap controls */
 .zen-form-control:focus,
-.zen-form-select:focus {
+.zen-form-select:focus,
+.form-control:focus,
+.form-select:focus {
   border-color: var(--zen-green);
   box-shadow: 0 0 0 0.2rem rgba(0, 107, 60, 0.15);
   outline: 0;
+}
+
+/* Visible keyboard focus for all interactive elements */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid #0b7a46;
+  outline-offset: 2px;
 }
 
 .zen-error-text {
   color: var(--zen-danger);
   font-size: 0.875rem;
   margin-top: 0.35rem;
-}
-
-.btn-zen-primary {
-  background-color: #006B3C;
-  border-color: #006B3C;
-}
-
-.btn-zen-primary:hover,
-.btn-zen-primary:focus,
-.btn-zen-primary:active {
-  background-color: #005a31;
-  border-color: #005a31;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .badge {
   font-size: 0.75rem;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .table thead th {
   font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
 .card {
   border-color: rgba(0, 0, 0, 0.04);
+  max-width: 100%;
+}
+
+/* Enforce Zen green for Bootstrap success accents used in badges/spinners */
+.text-bg-success {
+  background-color: #006b3c !important;
+}
+
+.text-success {
+  color: #006b3c !important;
+}
+
+.btn-outline-success {
+  --bs-btn-color: #006b3c;
+  --bs-btn-border-color: #006b3c;
+  --bs-btn-hover-bg: #006b3c;
+  --bs-btn-hover-border-color: #005a31;
+  --bs-btn-active-bg: #005a31;
+  --bs-btn-active-border-color: #005a31;
+  --bs-btn-disabled-color: #006b3c;
+  --bs-btn-disabled-border-color: #006b3c;
+}
+
+.spinner-border.text-success {
+  color: #006b3c !important;
+}
+
+/* Long filenames / titles must wrap, never force page scroll */
+.text-break {
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+}
+
+.ticket-row {
+  cursor: pointer;
+}
+
+/* Table wrapper scrolls internally, page itself never scrolls horizontally */
+.table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+
+.pagination {
+  flex-wrap: wrap;
+  justify-content: center;
+  row-gap: 0.5rem;
+}
+
+/* Navbar: always-visible responsive navigation (no hidden links) */
+.zen-navbar .container {
+  flex-wrap: wrap;
+}
+
+.zen-navbar .navbar-nav {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+}
+
+.requester-select-wrap {
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+.requester-select-wrap select {
+  max-width: 100%;
+}
+
+/* Attachment action buttons */
+.ticket-attachment-actions .btn {
+  white-space: nowrap;
+}
+
+/* ---------- Responsive rules ---------- */
+/* Mobile < 768px: single column, full-width controls, touch targets */
+@media (max-width: 767.98px) {
+  .container {
+    padding-left: 12px;
+    padding-right: 12px;
+    max-width: 100%;
+  }
+
+  .card-body.p-4 {
+    padding: 1rem !important;
+  }
+
+  /* Full-width controls on mobile (exclude screen-reader-only labels) */
+  .create-ticket-wrap .btn-zen-primary,
+  .create-ticket-wrap button[type="submit"] {
+    width: 100%;
+  }
+
+  .my-tickets-filters > .input-group,
+  .my-tickets-filters > .form-select,
+  .my-tickets-filters > .form-control {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .my-tickets-filters > .visually-hidden {
+    width: 1px !important;
+    min-width: 1px !important;
+    max-width: 1px !important;
+  }
+
+  /* Touch-friendly targets */
+  .btn,
+  .page-link,
+  .form-control,
+  .form-select {
+    min-height: 44px;
+  }
+
+  .btn-sm {
+    min-height: 38px;
+    padding: 0.45rem 0.75rem;
+    font-size: 0.875rem;
+  }
+
+  .ticket-attachment-actions {
+    width: 100%;
+  }
+
+  .ticket-attachment-actions .btn {
+    flex: 1 1 auto;
+  }
+
+  .requester-select-wrap {
+    width: 100%;
+  }
+
+  .requester-select-wrap select {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+  }
+
+  h1.h3 {
+    font-size: 1.35rem;
+    overflow-wrap: break-word;
+  }
+}
+
+/* Tablet 768-991px: constrain widths, keep two-column where practical */
+@media (min-width: 768px) and (max-width: 991.98px) {
+  .my-tickets-filters > .input-group,
+  .my-tickets-filters > .form-select,
+  .my-tickets-filters > .form-control {
+    min-width: 0 !important;
+    max-width: 100%;
+  }
+
+  .my-tickets-filters .input-group {
+    flex: 1 1 100%;
+    min-width: 0 !important;
+  }
+
+  .container {
+    max-width: 100%;
+  }
+
+  .requester-select-wrap select {
+    max-width: 220px;
+  }
+}
+
+/* Desktop >= 992px: centered content with sensible max width */
+@media (min-width: 992px) {
+  .my-tickets-filters {
+    flex-wrap: nowrap;
+  }
 }

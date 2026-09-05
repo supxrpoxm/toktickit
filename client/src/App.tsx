@@ -108,36 +108,36 @@ function App() {
     <div style={{ backgroundColor: '#F5F7F6', minHeight: '100vh' }}>
 
       {/* Navigation Header */}
-      <nav className="navbar navbar-expand-lg navbar-dark shadow-sm" style={{ backgroundColor: '#006B3C' }}>
-        <div className="container">
-          <a className="navbar-brand fw-bold d-flex align-items-center" href="#" onClick={() => setActivePage('myTickets')}>
-            <i className="bi bi-clock-history me-2 fs-4"></i> TokTickIT
+      <nav className="navbar navbar-expand navbar-dark shadow-sm zen-navbar" style={{ backgroundColor: '#006B3C' }}>
+        <div className="container flex-wrap gap-2 py-2">
+          <a className="navbar-brand fw-bold d-flex align-items-center" href="#" onClick={(e) => { e.preventDefault(); setSelectedTicketId(null); setActivePage('myTickets'); }}>
+            <i className="bi bi-clock-history me-2 fs-4" aria-hidden="true"></i> TokTickIT
           </a>
 
-          <div className="collapse navbar-collapse ms-4">
-            <ul className="navbar-nav me-auto mb-2 mb-lg-0">
-              <li className="nav-item">
+          <div className="d-flex align-items-center flex-wrap">
+            <ul className="navbar-nav flex-row flex-wrap me-auto mb-0">
+              <li className="nav-item me-3">
                 <a
                   className={`nav-link d-flex align-items-center ${activePage === 'myTickets' ? 'active fw-semibold' : ''}`}
                   href="#"
-                  onClick={(e) => { e.preventDefault(); setActivePage('myTickets'); }}
+                  onClick={(e) => { e.preventDefault(); setSelectedTicketId(null); setActivePage('myTickets'); }}
                 >
-                  <i className="bi bi-file-earmark-text me-1"></i> My Tickets
+                  <i className="bi bi-file-earmark-text me-1" aria-hidden="true"></i> My Tickets
                 </a>
               </li>
               <li className="nav-item">
                 <a
                   className={`nav-link d-flex align-items-center ${activePage === 'createTicket' ? 'active fw-semibold' : ''}`}
                   href="#"
-                  onClick={(e) => { e.preventDefault(); setActivePage('createTicket'); }}
+                  onClick={(e) => { e.preventDefault(); setSelectedTicketId(null); setActivePage('createTicket'); }}
                 >
-                  <i className="bi bi-plus-circle me-1"></i> Create Ticket
+                  <i className="bi bi-plus-circle me-1" aria-hidden="true"></i> Create Ticket
                 </a>
               </li>
             </ul>
           </div>
 
-          <div className="d-flex align-items-center ms-auto">
+          <div className="d-flex align-items-center ms-auto flex-wrap">
             <RequesterSelect requesters={requesters} value={requesterId} onChange={handleSelectRequester} />
           </div>
         </div>
@@ -152,7 +152,7 @@ function App() {
             onBack={() => setSelectedTicketId(null)}
           />
         ) : activePage === 'myTickets' ? (
-          <MyTickets requesterId={requesterId} onViewDetail={(id) => setSelectedTicketId(id)} />
+          <MyTickets requesterId={requesterId} onViewDetail={(id) => setSelectedTicketId(id)} onCreateTicket={() => setActivePage('createTicket')} />
         ) : (
           <CreateTicketForm requesterId={requesterId} onCreated={() => setActivePage('myTickets')} />
         )}

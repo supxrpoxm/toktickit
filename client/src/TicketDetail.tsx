@@ -102,7 +102,7 @@ export default function TicketDetail({ ticketId, requesterId, onBack }: TicketDe
     loadTicket();
 
     return () => abortController.abort();
-  }, [ticketId]);
+  }, [ticketId, requesterId]);
 
   async function handleAttachmentUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
@@ -138,14 +138,14 @@ export default function TicketDetail({ ticketId, requesterId, onBack }: TicketDe
     try {
       const response = await fetch(`/api/tickets/${ticketId}/attachments`, {
         method: "POST",
-        headers: { "x-requester-id": "1" },
+        headers: { "x-requester-id": String(requesterId) },
         body: formData,
       });
 
       if (!response.ok) throw new Error("Upload failed");
 
       const refreshedResponse = await fetch(`/api/tickets/${ticketId}`, {
-        headers: { "x-requester-id": "1" },
+        headers: { "x-requester-id": String(requesterId) },
       });
 
       if (!refreshedResponse.ok) throw new Error("Refresh failed");
@@ -164,7 +164,7 @@ export default function TicketDetail({ ticketId, requesterId, onBack }: TicketDe
 
     try {
       const response = await fetch(`/api/attachments/${attachment.id}/download`, {
-        headers: { "x-requester-id": "1" },
+        headers: { "x-requester-id": String(requesterId) },
       });
 
       if (!response.ok) throw new Error("Download failed");
@@ -183,12 +183,18 @@ export default function TicketDetail({ ticketId, requesterId, onBack }: TicketDe
 
   async function handleAttachmentRemove(attachmentId: number) {
     setAttachmentError("");
+    if (typeof window !== "undefined") {
+      const confirmed = window.confirm(
+        "Remove this attachment? It will be hidden from the ticket but retained for audit.",
+      );
+      if (!confirmed) return;
+    }
     setRemovingAttachmentId(attachmentId);
 
     try {
       const response = await fetch(`/api/attachments/${attachmentId}`, {
         method: "DELETE",
-        headers: { "x-requester-id": "1" },
+        headers: { "x-requester-id": String(requesterId) },
       });
 
       if (!response.ok) throw new Error("Removal failed");
@@ -214,10 +220,10 @@ export default function TicketDetail({ ticketId, requesterId, onBack }: TicketDe
 
   if (state === "loading") {
     return (
-      <main className="container py-5" aria-busy="true">
+      <main className="py-4 ticket-detail-wrap" aria-busy="true">
         <div className="card border-0 shadow-sm">
           <div className="card-body text-center py-5">
-            <div className="spinner-border text-success" role="status">
+            <div className="spinner-border" role="status" style={{ color: '#006B3C' }}>
               <span className="visually-hidden">Loading ticket...</span>
             </div>
             <p className="text-muted mt-3 mb-0">Loading ticket details...</p>
@@ -229,8 +235,8 @@ export default function TicketDetail({ ticketId, requesterId, onBack }: TicketDe
 
   if (state === "not-found") {
     return (
-      <main className="container py-5">
-        <div className="alert alert-warning shadow-sm" role="alert">
+      <main className="py-4 ticket-detail-wrap">
+        <div className="alert alert-warning shadow-sm text-break" role="alert">
           <h1 className="h5 mb-2">Ticket Not Found</h1>
           <p className="mb-0">This ticket does not exist or is not available to you.</p>
         </div>
@@ -240,9 +246,9 @@ export default function TicketDetail({ ticketId, requesterId, onBack }: TicketDe
 
   if (state === "error" || !ticket) {
     return (
-      <main className="container py-5">
-        <div className="alert alert-danger shadow-sm" role="alert">
-          Unable to load this ticket right now. Please try again later.
+      <main className="py-4 ticket-detail-wrap">
+        <div className="alert alert-danger shadow-sm d-flex flex-column flex-sm-row align-items-sm-center gap-2" role="alert">
+          <span className="text-break">Unable to load this ticket right now. Please try again later.</span>
         </div>
       </main>
     );
@@ -251,18 +257,18 @@ export default function TicketDetail({ ticketId, requesterId, onBack }: TicketDe
   const attachments = ticket.attachments ?? [];
 
   return (
-    <main className="container py-4 py-md-5">
+    <main className="py-2 py-md-3 ticket-detail-wrap">
       <div className="card border-0 shadow-sm">
-        <div className="card-header bg-white border-bottom p-4">
+        <div className="card-header bg-white border-bottom p-3 p-md-4">
           <div className="d-flex flex-wrap justify-content-between align-items-start gap-3">
-            <div>
-              <button type="button" className="btn btn-link p-0 mb-2 text-success" onClick={onBack}>
+            <div className="min-w-0" style={{ minWidth: 0, flex: '1 1 220px' }}>
+              <button type="button" className="btn btn-link p-0 mb-2 zen-text-primary text-decoration-underline" style={{ color: '#006B3C' }} onClick={onBack}>
                 &larr; Back to My Tickets
               </button>
-              <p className="text-success fw-semibold text-uppercase small mb-2">
+              <p className="fw-semibold text-uppercase small mb-2 text-break" style={{ color: '#006B3C' }}>
                 Ticket #{ticket.id}
               </p>
-              <h1 className="h3 mb-0">{ticket.title}</h1>
+              <h1 className="h3 mb-0 text-break">{ticket.title}</h1>
             </div>
             <span className={`badge ${statusBadgeClass[ticket.status] ?? "text-bg-secondary"}`}>
               {ticket.status}
@@ -270,7 +276,7 @@ export default function TicketDetail({ ticketId, requesterId, onBack }: TicketDe
           </div>
         </div>
 
-        <div className="card-body p-4">
+        <div className="card-body p-3 p-md-4">
           <section aria-labelledby="ticket-information-heading">
             <h2 id="ticket-information-heading" className="h5 mb-4">
               Ticket Information
@@ -365,16 +371,16 @@ export default function TicketDetail({ ticketId, requesterId, onBack }: TicketDe
                     className={`list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2 ${attachment.deletedAt ? "bg-body-secondary text-muted" : ""}`}
                     key={attachment.id}
                   >
-                    <div className="d-flex flex-column">
+                    <div className="d-flex flex-column min-w-0" style={{ minWidth: 0, flex: '1 1 200px' }}>
                       <span className={`fw-semibold text-break ${attachment.deletedAt ? "text-decoration-line-through" : ""}`}>
-                        <i className={`bi ${attachment.deletedAt ? "bi-file-earmark-x" : "bi-file-earmark"} me-2 ${attachment.deletedAt ? "text-secondary" : "text-success"}`} aria-hidden="true" />
+                        <i className={`bi ${attachment.deletedAt ? "bi-file-earmark-x" : "bi-file-earmark"} me-2 ${attachment.deletedAt ? "text-secondary" : ""}`} style={attachment.deletedAt ? undefined : { color: '#006B3C' }} aria-hidden="true" />
                         {attachment.fileName}
                       </span>
-                      <span className="small text-muted">
+                      <span className="small text-muted text-break">
                         {attachment.mimeType ?? "Type unavailable"} · {formatFileSize(attachment.sizeBytes)}
                       </span>
                     </div>
-                    <div className="d-flex align-items-center gap-2">
+                    <div className="d-flex align-items-center gap-2 flex-wrap ticket-attachment-actions">
                       {attachment.deletedAt ? (
                         <span className="badge text-bg-secondary">Deleted</span>
                       ) : (
