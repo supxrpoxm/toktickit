@@ -24,7 +24,11 @@ toktickit/
 │   ├── public/
 │   ├── src/
 │   ├── tests/
+│   │   ├── e2e/
+│   │   │   └── lab-02-responsive-screenshots.spec.ts
+│   │   └── lab-02/
 │   ├── package.json
+│   ├── playwright.config.ts
 │   └── vite.config.ts
 ├── server/
 │   ├── prisma/
@@ -34,10 +38,25 @@ toktickit/
 │   ├── tests/
 │   └── package.json
 ├── docs/
-│   └── lab-01/
-│       ├── ai_use.md
+│   ├── lab-01/
+│   │   ├── ai_use.md
+│   │   ├── reviewer.md
+│   │   └── tests.md
+│   └── lab-02/
+│       ├── specification.md
+│       ├── tests.md
+│       ├── ui-spec.md
+│       ├── api-spec.md
 │       ├── reviewer.md
-│       └── tests.md
+│       └── ai-use.md
+├── e2e/
+│   └── lab-02/
+├── artifacts/
+│   └── lab-02/
+│       └── screenshots/
+│           ├── create-ticket/
+│           ├── my-tickets/
+│           └── ticket-detail/
 ├── .gitignore
 └── README.md
 ```
@@ -66,7 +85,7 @@ npm install
 ```
 
 **3. Database Initialization (Prisma)**
-Generate the Prisma Client and apply database migrations to setup the Category model:
+Generate the Prisma Client and apply database migrations to setup the Requester, Ticket, Attachment, Category, and Related System models:
 ```bash
 cd server
 npx prisma migrate dev --name init
@@ -103,3 +122,10 @@ npm run test
 cd server
 npm run test
 ```
+
+**End-to-End & Visual Tests (Playwright):**
+```bash
+cd client
+npx playwright test
+```
+Runs the Lab 2 responsive screenshot suite across Desktop (1280px), Tablet (768px), and Mobile (375px) viewports for the Create Ticket, My Tickets, and Ticket Detail screens. Screenshots are saved to `artifacts/lab-02/screenshots/` organized by screen.
