@@ -141,7 +141,7 @@ describe("TicketDetail", () => {
     expect(screen.getByText(/does not exist or is not available/)).toBeTruthy();
   });
 
-  it("shows not-found state when access is forbidden", async () => {
+  it("shows unauthorized state when access is forbidden", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       ok: false,
       status: 403,
@@ -150,7 +150,8 @@ describe("TicketDetail", () => {
 
     render(<TicketDetail ticketId={101} requesterId={1} onBack={vi.fn()} />);
 
-    expect(await screen.findByText("Ticket Not Found")).toBeTruthy();
+    expect(await screen.findByText("Unauthorized Access")).toBeTruthy();
+    expect(screen.getByText("You do not have permission to view this ticket.")).toBeTruthy();
   });
 
   it("shows empty attachment state when ticket has no attachments", async () => {
@@ -191,11 +192,10 @@ describe("CreateTicketForm", () => {
     render(<CreateTicketForm />);
     const form = screen.getByRole("button", { name: "Submit Ticket" }).closest("form")!;
     const selects = form.querySelectorAll("select");
-    const textInputs = form.querySelectorAll('input[type="text"]');
     const description = form.querySelector("textarea")!;
 
     fireEvent.change(selects[0], { target: { value: "2" } });
-    fireEvent.change(textInputs[2], { target: { value: "VPN access" } });
+    fireEvent.change(screen.getByPlaceholderText("Briefly describe the request"), { target: { value: "VPN access" } });
     fireEvent.change(description, { target: { value: "Remote access is required." } });
     fireEvent.submit(form);
 
@@ -210,11 +210,10 @@ describe("CreateTicketForm", () => {
     render(<CreateTicketForm />);
     const form = screen.getByRole("button", { name: "Submit Ticket" }).closest("form")!;
     const selects = form.querySelectorAll("select");
-    const textInputs = form.querySelectorAll('input[type="text"]');
     const description = form.querySelector("textarea")!;
 
     fireEvent.change(selects[0], { target: { value: "2" } });
-    fireEvent.change(textInputs[2], { target: { value: "VPN access" } });
+    fireEvent.change(screen.getByPlaceholderText("Briefly describe the request"), { target: { value: "VPN access" } });
     fireEvent.change(description, { target: { value: "Remote access is required." } });
     fireEvent.submit(form);
 

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "../../src/App.js";
@@ -31,6 +31,12 @@ function mockSuccessfulApi() {
 }
 
 describe("App", () => {
+  beforeEach(() => {
+    // Requester selection persists in localStorage for ticket-URL deep links;
+    // clear it so each test starts logged out at the requester gate.
+    localStorage.clear();
+  });
+
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();

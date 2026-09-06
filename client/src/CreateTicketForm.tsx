@@ -4,10 +4,11 @@ const todayDate = new Date().toISOString().split('T')[0];
 
 type CreateTicketFormProps = {
   requesterId?: number;
+  requesterName?: string;
   onCreated?: () => void;
 };
 
-export default function CreateTicketForm({ requesterId = 1, onCreated }: CreateTicketFormProps) {
+export default function CreateTicketForm({ requesterId = 1, requesterName = '', onCreated }: CreateTicketFormProps) {
   const [categoryId, setCategoryId] = useState('');
   const [relatedSystemId, setRelatedSystemId] = useState('');
   const [priority, setPriority] = useState('');
@@ -77,7 +78,7 @@ export default function CreateTicketForm({ requesterId = 1, onCreated }: CreateT
           <form onSubmit={handleSubmit} noValidate>
             {/* Read-only Fields */}
             <div className="row mb-4">
-              <div className="col-12 col-md-6 mb-3 mb-md-0">
+              <div className="col-12 col-md-4 mb-3 mb-md-0">
                 <label className="form-label fw-bold">Ticket No.</label>
                 <input
                   type="text"
@@ -89,13 +90,26 @@ export default function CreateTicketForm({ requesterId = 1, onCreated }: CreateT
                   aria-readonly="true"
                 />
               </div>
-              <div className="col-12 col-md-6">
+              <div className="col-12 col-md-4 mb-3 mb-md-0">
                 <label className="form-label fw-bold">Date</label>
                 <input
                   type="text"
                   className="form-control zen-readonly"
                   value={todayDate}
                   style={{ backgroundColor: '#EAF6EF' }}
+                  readOnly
+                  aria-readonly="true"
+                />
+              </div>
+              <div className="col-12 col-md-4">
+                <label htmlFor="ticket-requester" className="form-label fw-bold">Requester</label>
+                <input
+                  id="ticket-requester"
+                  type="text"
+                  className="form-control zen-readonly"
+                  value={requesterName || `Requester #${requesterId}`}
+                  style={{ backgroundColor: '#EAF6EF' }}
+                  disabled
                   readOnly
                   aria-readonly="true"
                 />

@@ -43,6 +43,7 @@ const MOCK_TICKET_DETAIL = {
   updatedAt: "2026-09-04T10:00:00.000Z",
   category: { id: 4, name: "Network" },
   relatedSystem: { id: 3, name: "VPN" },
+  requester: { id: 1, name: "Alice Johnson" },
   attachments: [
     { id: 1, fileName: "vpn-guide.pdf", mimeType: "application/pdf", sizeBytes: 1024 * 350 },
     { id: 2, fileName: "network-diagram-with-a-very-long-file-name-to-test-wrapping.png", mimeType: "image/png", sizeBytes: 1024 * 900 },
@@ -246,6 +247,8 @@ for (const vp of VIEWPORTS) {
 
     // Metadata + attachments visible
     await expect(page.getByText("Ticket Information")).toBeVisible();
+    await expect(page.locator("#ticket-requester-name")).toBeVisible();
+    await expect(page.locator("#ticket-requester-name")).toHaveValue("Alice Johnson");
     await expect(page.getByText("Attachments")).toBeVisible();
     await expect(page.locator("#ticket-attachments")).toBeVisible();
     await expect(page.getByText("vpn-guide.pdf")).toBeVisible();

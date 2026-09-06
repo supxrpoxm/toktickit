@@ -132,7 +132,58 @@ test.describe("Issue 8 ticket creation", () => {
     await expect(page.getByRole("heading", { name: "My Tickets" })).toBeVisible();
     await page.getByRole("button", { name: "999", exact: true }).click();
 
-    await expect(page.getByText(/does not exist or is not available/i)).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Unauthorized Access" })).toBeVisible();
+    await expect(page.getByText("You do not have permission to view this ticket.")).toBeVisible();
+    // User stays in the app (not kicked back to the requester gate) and can navigate back.
+    await expect(page.getByRole("heading", { name: "Select Requester" })).not.toBeVisible();
+    await page.getByRole("button", { name: /Back to My Tickets/i }).click();
+    await expect(page.getByRole("heading", { name: "My Tickets" })).toBeVisible();
+  });
+
+  test("direct URL access to another user's ticket shows Unauthorized instead of login", async ({ page }) => {
+    await page.route("**/api/requesters", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          { id: 1, name: "Alice Johnson", email: "alice@company.com" },
+        ]),
+      });
+    });
+
+    await page.route("**/api/tickets**", async (route) => {
+      const url = route.request().url();
+
+      if (/\/api\/tickets\/\d+/.test(url)) {
+        await route.fulfill({
+          status: 403,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Forbidden: you can only access your own tickets." }),
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          tickets: [],
+          pagination: { page: 1, limit: 10, total: 0, totalPages: 1 },
+        }),
+      });
+    });
+
+    // Simulate an already logged-in user by restoring their persisted selection,
+    // then manually navigating straight to another user's ticket URL.
+    await page.addInitScript(() => {
+      localStorage.setItem("toktickit.requesterId", "1");
+    });
+    await page.goto("/tickets/999");
+
+    await expect(page).toHaveURL(/\/tickets\/999/);
+    await expect(page.getByRole("heading", { name: "Unauthorized Access" })).toBeVisible();
+    await expect(page.getByText("You do not have permission to view this ticket.")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Select Requester" })).not.toBeVisible();
   });
 
   test("attachment validation shows error for invalid file type", async ({ page }) => {

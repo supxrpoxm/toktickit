@@ -20,10 +20,11 @@ type TicketDetailData = {
   updatedAt?: string;
   category?: { name: string } | null;
   relatedSystem?: { name: string } | null;
+  requester?: { id?: number; name?: string | null } | null;
   attachments?: TicketAttachment[];
 };
 
-type DetailState = "loading" | "success" | "error" | "not-found";
+type DetailState = "loading" | "success" | "error" | "not-found" | "forbidden";
 
 const allowedAttachmentTypes = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
 const allowedAttachmentExtensions = [".jpg", ".jpeg", ".png", ".webp", ".pdf"];
@@ -52,10 +53,11 @@ function formatFileSize(sizeBytes?: number | null) {
 type TicketDetailProps = {
   ticketId: number;
   requesterId: number;
+  requesterName?: string;
   onBack: () => void;
 };
 
-export default function TicketDetail({ ticketId, requesterId, onBack }: TicketDetailProps) {
+export default function TicketDetail({ ticketId, requesterId, requesterName = '', onBack }: TicketDetailProps) {
   const [ticket, setTicket] = useState<TicketDetailData | null>(null);
   const [state, setState] = useState<DetailState>("loading");
   const [isUploading, setIsUploading] = useState(false);
@@ -78,7 +80,12 @@ export default function TicketDetail({ ticketId, requesterId, onBack }: TicketDe
           signal: abortController.signal,
         });
 
-        if (response.status === 404 || response.status === 403) {
+        if (response.status === 403) {
+          setState("forbidden");
+          return;
+        }
+
+        if (response.status === 404) {
           setState("not-found");
           return;
         }
@@ -238,7 +245,24 @@ export default function TicketDetail({ ticketId, requesterId, onBack }: TicketDe
       <main className="py-4 ticket-detail-wrap">
         <div className="alert alert-warning shadow-sm text-break" role="alert">
           <h1 className="h5 mb-2">Ticket Not Found</h1>
-          <p className="mb-0">This ticket does not exist or is not available to you.</p>
+          <p className="mb-2">This ticket does not exist or is not available to you.</p>
+          <button type="button" className="btn btn-sm btn-outline-secondary" onClick={onBack}>
+            &larr; Back to My Tickets
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  if (state === "forbidden") {
+    return (
+      <main className="py-4 ticket-detail-wrap">
+        <div className="alert alert-danger shadow-sm text-break" role="alert">
+          <h1 className="h5 mb-2">Unauthorized Access</h1>
+          <p className="mb-3">You do not have permission to view this ticket.</p>
+          <button type="button" className="btn btn-sm btn-outline-danger" onClick={onBack}>
+            &larr; Back to My Tickets
+          </button>
         </div>
       </main>
     );
@@ -303,6 +327,20 @@ export default function TicketDetail({ ticketId, requesterId, onBack }: TicketDe
                 <p className="mb-0 text-break" style={{ whiteSpace: "pre-wrap" }}>
                   {ticket.description}
                 </p>
+              </div>
+
+              <div className="col-12 col-md-6">
+                <label htmlFor="ticket-requester-name" className="form-label text-muted small mb-1">Requester</label>
+                <input
+                  id="ticket-requester-name"
+                  type="text"
+                  className="form-control zen-readonly"
+                  value={ticket.requester?.name || requesterName || `Requester #${requesterId}`}
+                  style={{ backgroundColor: '#EAF6EF' }}
+                  disabled
+                  readOnly
+                  aria-readonly="true"
+                />
               </div>
 
               {ticket.category && (

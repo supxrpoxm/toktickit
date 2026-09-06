@@ -1,17 +1,54 @@
 import React, { useEffect, useState } from 'react';
+import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import CreateTicketForm from './CreateTicketForm';
 import RequesterSelect, { type RequesterOption } from './RequesterSelect';
 import MyTickets from './MyTickets'; // ดึงหน้า My Tickets เข้ามา
 import TicketDetail from './TicketDetail';
 import { fetchActiveRequesters } from './api';
 
-function App() {
-  // สร้าง State เพื่อจำว่าตอนนี้อยู่หน้าไหน (ค่าเริ่มต้นให้เป็น myTickets)
-  const [activePage, setActivePage] = useState<'myTickets' | 'createTicket'>('myTickets');
-  const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
+const REQUESTER_STORAGE_KEY = 'toktickit.requesterId';
+
+function readStoredRequesterId(): number | null {
+  try {
+    const raw = localStorage.getItem(REQUESTER_STORAGE_KEY);
+    const id = raw ? Number(raw) : NaN;
+    return Number.isInteger(id) && id > 0 ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+type TicketDetailRouteProps = {
+  requesterId: number;
+  requesterName: string;
+  onBack: () => void;
+};
+
+function TicketDetailRoute({ requesterId, requesterName, onBack }: TicketDetailRouteProps) {
+  const { id } = useParams();
+  const ticketId = Number(id);
+
+  if (!Number.isInteger(ticketId) || ticketId <= 0) {
+    return <Navigate to="/" replace />;
+  }
+
+  return (
+    <TicketDetail
+      ticketId={ticketId}
+      requesterId={requesterId}
+      requesterName={requesterName}
+      onBack={onBack}
+    />
+  );
+}
+
+function AppShell() {
+  const navigate = useNavigate();
+  const location = useLocation();
   // Requester ที่กำลังใช้งาน — ยังไม่เลือก (null) = ยังไม่เข้าหน้าหลัก
+  // Persisted in localStorage so ticket URLs (e.g. /tickets/:id) survive a reload.
   const [requesters, setRequesters] = useState<RequesterOption[]>([]);
-  const [requesterId, setRequesterId] = useState<number | null>(null);
+  const [requesterId, setRequesterId] = useState<number | null>(readStoredRequesterId);
   const [isLoadingRequesters, setIsLoadingRequesters] = useState(true);
   const [requesterError, setRequesterError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
@@ -40,11 +77,32 @@ function App() {
     };
   }, [retryCount]);
 
+  // Drop a stored requester that is no longer active (e.g. deactivated server-side).
+  useEffect(() => {
+    if (isLoadingRequesters || requesterError) return;
+    if (requesterId !== null && !requesters.some((r) => r.id === requesterId)) {
+      setRequesterId(null);
+      try {
+        localStorage.removeItem(REQUESTER_STORAGE_KEY);
+      } catch {
+        // Storage unavailable — gate will ask to select again.
+      }
+    }
+  }, [isLoadingRequesters, requesterError, requesters, requesterId]);
+
   function handleSelectRequester(id: number) {
     setRequesterId(id);
-    setSelectedTicketId(null);
-    setActivePage('myTickets');
+    try {
+      localStorage.setItem(REQUESTER_STORAGE_KEY, String(id));
+    } catch {
+      // Storage unavailable — selection still works for this session.
+    }
+    navigate('/');
   }
+
+  const currentRequesterName = requesters.find((r) => r.id === requesterId)?.name ?? '';
+  const isMyTicketsActive = location.pathname === '/' || (/^\/tickets\/\d+\/?$/.test(location.pathname));
+  const isCreateActive = location.pathname === '/tickets/new';
 
   // Gate: ต้องเลือก Requester ก่อนจึงจะเข้าหน้าหลักได้
   if (requesterId === null) {
@@ -110,29 +168,27 @@ function App() {
       {/* Navigation Header */}
       <nav className="navbar navbar-expand navbar-dark shadow-sm zen-navbar" style={{ backgroundColor: '#006B3C' }}>
         <div className="container flex-wrap gap-2 py-2">
-          <a className="navbar-brand fw-bold d-flex align-items-center" href="#" onClick={(e) => { e.preventDefault(); setSelectedTicketId(null); setActivePage('myTickets'); }}>
+          <Link className="navbar-brand fw-bold d-flex align-items-center" to="/">
             <i className="bi bi-clock-history me-2 fs-4" aria-hidden="true"></i> TokTickIT
-          </a>
+          </Link>
 
           <div className="d-flex align-items-center flex-wrap">
             <ul className="navbar-nav flex-row flex-wrap me-auto mb-0">
               <li className="nav-item me-3">
-                <a
-                  className={`nav-link d-flex align-items-center ${activePage === 'myTickets' ? 'active fw-semibold' : ''}`}
-                  href="#"
-                  onClick={(e) => { e.preventDefault(); setSelectedTicketId(null); setActivePage('myTickets'); }}
+                <Link
+                  className={`nav-link d-flex align-items-center ${isMyTicketsActive ? 'active fw-semibold' : ''}`}
+                  to="/"
                 >
                   <i className="bi bi-file-earmark-text me-1" aria-hidden="true"></i> My Tickets
-                </a>
+                </Link>
               </li>
               <li className="nav-item">
-                <a
-                  className={`nav-link d-flex align-items-center ${activePage === 'createTicket' ? 'active fw-semibold' : ''}`}
-                  href="#"
-                  onClick={(e) => { e.preventDefault(); setSelectedTicketId(null); setActivePage('createTicket'); }}
+                <Link
+                  className={`nav-link d-flex align-items-center ${isCreateActive ? 'active fw-semibold' : ''}`}
+                  to="/tickets/new"
                 >
                   <i className="bi bi-plus-circle me-1" aria-hidden="true"></i> Create Ticket
-                </a>
+                </Link>
               </li>
             </ul>
           </div>
@@ -143,22 +199,52 @@ function App() {
         </div>
       </nav>
 
-      {/* พื้นที่หลักของหน้าเว็บ: สลับการแสดงผลตาม activePage */}
+      {/* พื้นที่หลักของหน้าเว็บ: แสดงผลตาม route */}
       <div className="container mt-4">
-        {selectedTicketId !== null ? (
-          <TicketDetail
-            ticketId={selectedTicketId}
-            requesterId={requesterId}
-            onBack={() => setSelectedTicketId(null)}
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <MyTickets
+                requesterId={requesterId}
+                onViewDetail={(id) => navigate(`/tickets/${id}`)}
+                onCreateTicket={() => navigate('/tickets/new')}
+              />
+            }
           />
-        ) : activePage === 'myTickets' ? (
-          <MyTickets requesterId={requesterId} onViewDetail={(id) => setSelectedTicketId(id)} onCreateTicket={() => setActivePage('createTicket')} />
-        ) : (
-          <CreateTicketForm requesterId={requesterId} onCreated={() => setActivePage('myTickets')} />
-        )}
+          <Route
+            path="/tickets/new"
+            element={
+              <CreateTicketForm
+                requesterId={requesterId}
+                requesterName={currentRequesterName}
+                onCreated={() => navigate('/')}
+              />
+            }
+          />
+          <Route
+            path="/tickets/:id"
+            element={
+              <TicketDetailRoute
+                requesterId={requesterId}
+                requesterName={currentRequesterName}
+                onBack={() => navigate('/')}
+              />
+            }
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </div>
 
     </div>
+  );
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <AppShell />
+    </BrowserRouter>
   );
 }
 

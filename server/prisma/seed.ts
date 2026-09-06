@@ -38,11 +38,14 @@ async function main() {
   }
 
   // --- Requesters ---
+  // NOTE: "New Employee" is an active requester with zero tickets by design,
+  // so logging in as them always triggers the My Tickets empty state.
   const requesterSeeds = [
     { name: "Alice Johnson", email: "alice@company.com", isActive: true },
     { name: "Brandon Lee", email: "brandon@company.com", isActive: true },
     { name: "Carmen Diaz", email: "carmen@company.com", isActive: true },
     { name: "Darius Patel", email: "darius@company.com", isActive: true },
+    { name: "New Employee", email: "new.employee@company.com", isActive: true },
     { name: "Evelyn Gray", email: "evelyn@company.com", isActive: false },
   ];
 
@@ -64,7 +67,20 @@ async function main() {
   // --- 50 Mock Tickets ---
   const categories = await prisma.category.findMany({ orderBy: { id: "asc" } });
   const systems = await prisma.relatedSystem.findMany({ orderBy: { id: "asc" } });
-  const activeRequesters = requesterSeeds.filter((r) => r.isActive);
+
+  // Ticket owners: only the four original active requesters.
+  // "New Employee" is intentionally excluded so they start with zero tickets (empty state).
+  const ticketOwnerEmails = [
+    "alice@company.com",
+    "brandon@company.com",
+    "carmen@company.com",
+    "darius@company.com",
+  ];
+  const ticketOwners = await prisma.requester.findMany({
+    where: { email: { in: ticketOwnerEmails } },
+    orderBy: { id: "asc" },
+  });
+  const requesterIds = ticketOwners.map((r) => r.id);
 
   const priorities = ["High", "Medium", "Low"] as const;
   const statuses = ["Open", "In Progress", "Resolved", "Closed"];
@@ -133,8 +149,6 @@ async function main() {
   for (const sys of systems) {
     systemMap[sys.name] = sys.id;
   }
-
-  const requesterIds = [1, 2, 3, 4]; // active requesters
 
   let ticketCount = 0;
 
