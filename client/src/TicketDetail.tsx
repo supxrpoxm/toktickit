@@ -73,10 +73,9 @@ export default function TicketDetail({ ticketId, requesterId, requesterName = ''
       setTicket(null);
 
       try {
+        // Lab 3 (Issue 2): identity comes from the session cookie.
         const response = await fetch(`/api/tickets/${ticketId}`, {
-          headers: {
-            "x-requester-id": String(requesterId),
-          },
+          credentials: "include",
           signal: abortController.signal,
         });
 
@@ -145,14 +144,14 @@ export default function TicketDetail({ ticketId, requesterId, requesterName = ''
     try {
       const response = await fetch(`/api/tickets/${ticketId}/attachments`, {
         method: "POST",
-        headers: { "x-requester-id": String(requesterId) },
+        credentials: "include",
         body: formData,
       });
 
       if (!response.ok) throw new Error("Upload failed");
 
       const refreshedResponse = await fetch(`/api/tickets/${ticketId}`, {
-        headers: { "x-requester-id": String(requesterId) },
+        credentials: "include",
       });
 
       if (!refreshedResponse.ok) throw new Error("Refresh failed");
@@ -171,7 +170,7 @@ export default function TicketDetail({ ticketId, requesterId, requesterName = ''
 
     try {
       const response = await fetch(`/api/attachments/${attachment.id}/download`, {
-        headers: { "x-requester-id": String(requesterId) },
+        credentials: "include",
       });
 
       if (!response.ok) throw new Error("Download failed");
@@ -201,7 +200,7 @@ export default function TicketDetail({ ticketId, requesterId, requesterName = ''
     try {
       const response = await fetch(`/api/attachments/${attachmentId}`, {
         method: "DELETE",
-        headers: { "x-requester-id": String(requesterId) },
+        credentials: "include",
       });
 
       if (!response.ok) throw new Error("Removal failed");

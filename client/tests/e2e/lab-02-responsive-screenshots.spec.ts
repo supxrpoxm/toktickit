@@ -10,10 +10,15 @@ const VIEWPORTS = [
   { name: "mobile", width: 375, height: 667 },
 ] as const;
 
-const MOCK_REQUESTERS = [
-  { id: 1, name: "Alice Johnson", email: "alice@company.com" },
-  { id: 2, name: "Brandon Lee", email: "brandon@company.com" },
-];
+const MOCK_SESSION_USER = {
+  id: 1,
+  name: "Alice Johnson",
+  email: "alice@company.com",
+  role: "Requester",
+  isActive: true,
+  requiresPasswordChange: false,
+  mustChangePassword: false,
+};
 
 const MOCK_TICKETS = [
   {
@@ -51,11 +56,24 @@ const MOCK_TICKET_DETAIL = {
 };
 
 async function mockLab02Apis(page: Page) {
-  await page.route("**/api/requesters", async (route) => {
+  // Lab 3 (Issue 2): session identity replaces the requester selector.
+  await page.route("**/api/health", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "ok" }) });
+  });
+
+  await page.route("**/api/auth/me", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(MOCK_REQUESTERS),
+      body: JSON.stringify({ success: true, data: { user: MOCK_SESSION_USER } }),
+    });
+  });
+
+  await page.route("**/api/auth/login", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ success: true, data: { user: MOCK_SESSION_USER } }),
     });
   });
 
@@ -104,9 +122,10 @@ async function mockLab02Apis(page: Page) {
 }
 
 async function selectRequester(page: Page) {
+  // Lab 3 (Issue 2): the session mock below holds a valid session, so the
+  // app boots straight into My Tickets. (The login screen itself is covered
+  // by the lab-03 authentication spec and the issue-08 spec.)
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Select Requester" })).toBeVisible();
-  await page.getByRole("button", { name: /Alice Johnson/ }).click();
   await expect(page.getByRole("heading", { name: "My Tickets" })).toBeVisible();
 }
 
@@ -226,7 +245,9 @@ for (const vp of VIEWPORTS) {
     // Nav links must remain visible (no hidden buttons) at all viewports
     await expect(page.getByRole("link", { name: /My Tickets/i })).toBeVisible();
     await expect(page.getByRole("link", { name: /Create Ticket/i })).toBeVisible();
-    await expect(page.getByLabel("Select requester")).toBeVisible();
+    // Authenticated shell affordances must remain visible at all viewports
+    await expect(page.getByRole("button", { name: "Logout" })).toBeVisible();
+    await expect(page.getByText("Alice Johnson")).toBeVisible();
 
     await assertZenHeader(page);
     await assertNoHorizontalOverflow(page, vp.width);

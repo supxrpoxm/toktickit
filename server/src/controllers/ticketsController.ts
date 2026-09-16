@@ -12,6 +12,30 @@ function toSafeNumber(value: unknown): number | null {
   return null;
 }
 
+// Lab 3 (Issue 2) — authenticated identity wins (BR-03 / AC-07).
+// When a session exists, its user id is authoritative and every
+// client-supplied requesterId (query/header/body) is IGNORED, so spoofed
+// identity fields can never leak another user's data. Without a session the
+// Lab 2 header/body flow still works (transitional legacy fallback; the full
+// 401 lock-down lands with the authorization issue).
+function sessionRequesterId(req: Request): number | null {
+  return req.authUser ? req.authUser.id : null;
+}
+
+// Mandatory password-change gate for session callers (BR-02): while
+// requiresPasswordChange is true, normal ticket APIs return
+// 403 PASSWORD_CHANGE_REQUIRED. Returns true when the gate fired.
+function passwordGate(req: Request, res: Response): boolean {
+  if (req.authUser?.requiresPasswordChange) {
+    res.status(403).json({
+      success: false,
+      error: { code: "PASSWORD_CHANGE_REQUIRED", message: "Please change your password to continue." },
+    });
+    return true;
+  }
+  return false;
+}
+
 const uploadDirectory = path.resolve("uploads");
 fs.mkdirSync(uploadDirectory, { recursive: true });
 
@@ -40,25 +64,34 @@ export const attachmentUpload = multer({
 });
 
 function attachmentOwnerId(req: Request): number | null {
-  return toSafeNumber(req.headers["x-requester-id"]);
+  // Session identity wins over the legacy header (AC-07).
+  return sessionRequesterId(req) ?? toSafeNumber(req.headers["x-requester-id"]);
 }
 
 export async function getTickets(req: Request, res: Response) {
   try {
+    const sessionId = sessionRequesterId(req);
+    if (sessionId) {
+      if (passwordGate(req, res)) return;
+    }
+
     const queryRequesterId = toSafeNumber(req.query.requesterId);
     const headerRequesterId = toSafeNumber(req.headers["x-requester-id"]);
-    const requesterId = queryRequesterId ?? headerRequesterId;
+    // Session identity wins; spoofed query/header values are ignored (AC-07).
+    const requesterId = sessionId ?? queryRequesterId ?? headerRequesterId;
 
     if (!requesterId) {
       return res.status(403).json({ error: "Forbidden: requesterId is required." });
     }
 
-    if (headerRequesterId && queryRequesterId && headerRequesterId !== queryRequesterId) {
-      return res.status(403).json({ error: "Forbidden: you can only access your own tickets." });
-    }
+    if (!sessionId) {
+      if (headerRequesterId && queryRequesterId && headerRequesterId !== queryRequesterId) {
+        return res.status(403).json({ error: "Forbidden: you can only access your own tickets." });
+      }
 
-    if (headerRequesterId && requesterId !== headerRequesterId) {
-      return res.status(403).json({ error: "Forbidden: you can only access your own tickets." });
+      if (headerRequesterId && requesterId !== headerRequesterId) {
+        return res.status(403).json({ error: "Forbidden: you can only access your own tickets." });
+      }
     }
 
     const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
@@ -127,8 +160,9 @@ export async function getTickets(req: Request, res: Response) {
 
 export async function getTicketById(req: Request, res: Response) {
   try {
+    if (passwordGate(req, res)) return;
     const ticketId = toSafeNumber(req.params.id);
-    const requesterId = toSafeNumber(req.headers["x-requester-id"]);
+    const requesterId = attachmentOwnerId(req);
 
     if (!ticketId || !requesterId) {
       return res.status(403).json({ error: "Forbidden: requesterId is required." });
@@ -160,7 +194,9 @@ export async function getTicketById(req: Request, res: Response) {
 
 export async function createTicket(req: Request, res: Response) {
   try {
-    const requesterId = toSafeNumber(req.body.requesterId);
+    if (passwordGate(req, res)) return;
+    // Session identity wins; a spoofed body.requesterId is ignored (AC-07).
+    const requesterId = sessionRequesterId(req) ?? toSafeNumber(req.body.requesterId);
     const categoryId = toSafeNumber(req.body.categoryId);
     const relatedSystemId = req.body.relatedSystemId
       ? toSafeNumber(req.body.relatedSystemId)
@@ -197,6 +233,7 @@ export async function createTicket(req: Request, res: Response) {
 
 export async function addAttachments(req: Request, res: Response) {
   try {
+    if (passwordGate(req, res)) return;
     const ticketId = toSafeNumber(req.params.id);
     const requesterId = attachmentOwnerId(req);
     const files = (req.files as Express.Multer.File[] | undefined) ?? [];
@@ -255,6 +292,7 @@ export async function addAttachments(req: Request, res: Response) {
 
 export async function getAttachments(req: Request, res: Response) {
   try {
+    if (passwordGate(req, res)) return;
     const ticketId = toSafeNumber(req.params.id);
     const requesterId = attachmentOwnerId(req);
 
@@ -287,6 +325,7 @@ export async function getAttachments(req: Request, res: Response) {
 
 export async function downloadAttachment(req: Request, res: Response) {
   try {
+    if (passwordGate(req, res)) return;
     const fileId = toSafeNumber(req.params.fileId);
     const requesterId = attachmentOwnerId(req);
 
@@ -319,6 +358,7 @@ export async function downloadAttachment(req: Request, res: Response) {
 
 export async function removeAttachment(req: Request, res: Response) {
   try {
+    if (passwordGate(req, res)) return;
     const fileId = toSafeNumber(req.params.fileId);
     const requesterId = attachmentOwnerId(req);
 

@@ -1,5 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 
+// Lab 3 (Issue 2): the Development Requester selector is removed. These
+// Lab 2 regression flows now sign in through the Login screen (mocked
+// session API) and prove ticket creation, validation, ownership, attachment,
+// and retry behavior work under the authenticated identity.
+
 type MockTicket = {
   id: number;
   createdAt: string;
@@ -7,20 +12,64 @@ type MockTicket = {
   status: string;
 };
 
-async function mockTicketApi(page: Page) {
-  let tickets: MockTicket[] = [];
+const signedInUser = {
+  id: 1,
+  name: "Alice Johnson",
+  email: "alice@company.com",
+  role: "Requester",
+  isActive: true,
+  requiresPasswordChange: false,
+  mustChangePassword: false,
+};
 
-  await page.route("**/api/requesters", async (route) => {
+async function mockAuthenticatedApi(page: Page, options: { signedIn: boolean } = { signedIn: false }) {
+  await page.route("**/api/health", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "ok" }) });
+  });
+
+  await page.route("**/api/auth/me", async (route) => {
+    if (!options.signedIn) {
+      await route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({ success: false, error: { code: "UNAUTHENTICATED", message: "Please sign in." } }),
+      });
+      return;
+    }
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify([
-        { id: 1, name: "Alice Johnson", email: "alice@company.com" },
-        { id: 2, name: "Brandon Lee", email: "brandon@company.com" },
-        { id: 3, name: "Carmen Diaz", email: "carmen@company.com" },
-      ]),
+      body: JSON.stringify({ success: true, data: { user: signedInUser } }),
     });
   });
+
+  await page.route("**/api/auth/login", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ success: true, data: { user: signedInUser } }),
+    });
+  });
+
+  await page.route("**/api/auth/logout", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ success: true, data: { loggedOut: true } }),
+    });
+  });
+}
+
+async function signIn(page: Page) {
+  await page.getByLabel(/Email/).fill("alice@company.com");
+  await page.getByPlaceholder("Your password").fill("Password123!");
+  await page.getByRole("button", { name: /^Sign in$/ }).click();
+  await expect(page.getByRole("heading", { name: "My Tickets" })).toBeVisible();
+}
+
+async function mockTicketApi(page: Page) {
+  await mockAuthenticatedApi(page);
+  let tickets: MockTicket[] = [];
 
   await page.route("**/api/tickets**", async (route) => {
     const request = route.request();
@@ -59,8 +108,8 @@ test.describe("Issue 8 ticket creation", () => {
     await mockTicketApi(page);
     await page.goto("/");
 
-    await expect(page.getByRole("heading", { name: "Select Requester" })).toBeVisible();
-    await page.getByRole("button", { name: /Alice Johnson/ }).click();
+    await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+    await signIn(page);
 
     await expect(page.getByRole("heading", { name: "My Tickets" })).toBeVisible();
     await page.getByRole("link", { name: /Create Ticket/i }).click();
@@ -83,7 +132,7 @@ test.describe("Issue 8 ticket creation", () => {
   test("negative path shows validation errors for empty required fields", async ({ page }) => {
     await mockTicketApi(page);
     await page.goto("/");
-    await page.getByRole("button", { name: /Alice Johnson/ }).click();
+    await signIn(page);
     await page.getByRole("link", { name: /Create Ticket/i }).click();
 
     await page.getByRole("button", { name: "Submit Ticket" }).click();
@@ -94,15 +143,7 @@ test.describe("Issue 8 ticket creation", () => {
   });
 
   test("ownership prevention blocks viewing another user's ticket detail", async ({ page }) => {
-    await page.route("**/api/requesters", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify([
-          { id: 1, name: "Alice Johnson", email: "alice@company.com" },
-        ]),
-      });
-    });
+    await mockAuthenticatedApi(page);
 
     await page.route("**/api/tickets**", async (route) => {
       const url = route.request().url();
@@ -127,29 +168,21 @@ test.describe("Issue 8 ticket creation", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: /Alice Johnson/ }).click();
+    await signIn(page);
 
     await expect(page.getByRole("heading", { name: "My Tickets" })).toBeVisible();
     await page.getByRole("button", { name: "999", exact: true }).click();
 
     await expect(page.getByRole("heading", { name: "Unauthorized Access" })).toBeVisible();
     await expect(page.getByText("You do not have permission to view this ticket.")).toBeVisible();
-    // User stays in the app (not kicked back to the requester gate) and can navigate back.
-    await expect(page.getByRole("heading", { name: "Select Requester" })).not.toBeVisible();
+    // User stays in the app (not kicked back to login) and can navigate back.
+    await expect(page.getByRole("heading", { name: "Sign in" })).not.toBeVisible();
     await page.getByRole("button", { name: /Back to My Tickets/i }).click();
     await expect(page.getByRole("heading", { name: "My Tickets" })).toBeVisible();
   });
 
   test("direct URL access to another user's ticket shows Unauthorized instead of login", async ({ page }) => {
-    await page.route("**/api/requesters", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify([
-          { id: 1, name: "Alice Johnson", email: "alice@company.com" },
-        ]),
-      });
-    });
+    await mockAuthenticatedApi(page, { signedIn: true });
 
     await page.route("**/api/tickets**", async (route) => {
       const url = route.request().url();
@@ -173,29 +206,17 @@ test.describe("Issue 8 ticket creation", () => {
       });
     });
 
-    // Simulate an already logged-in user by restoring their persisted selection,
-    // then manually navigating straight to another user's ticket URL.
-    await page.addInitScript(() => {
-      localStorage.setItem("toktickit.requesterId", "1");
-    });
+    // An already-authenticated user navigates straight to another user's ticket URL.
     await page.goto("/tickets/999");
 
     await expect(page).toHaveURL(/\/tickets\/999/);
     await expect(page.getByRole("heading", { name: "Unauthorized Access" })).toBeVisible();
     await expect(page.getByText("You do not have permission to view this ticket.")).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Select Requester" })).not.toBeVisible();
+    await expect(page.getByRole("heading", { name: "Sign in" })).not.toBeVisible();
   });
 
   test("attachment validation shows error for invalid file type", async ({ page }) => {
-    await page.route("**/api/requesters", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify([
-          { id: 1, name: "Alice Johnson", email: "alice@company.com" },
-        ]),
-      });
-    });
+    await mockAuthenticatedApi(page);
 
     await page.route("**/api/tickets**", async (route) => {
       const url = route.request().url();
@@ -236,7 +257,7 @@ test.describe("Issue 8 ticket creation", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: /Alice Johnson/ }).click();
+    await signIn(page);
     await page.getByRole("button", { name: "101", exact: true }).click();
 
     await expect(page.getByRole("heading", { name: "VPN access" })).toBeVisible();
@@ -250,18 +271,8 @@ test.describe("Issue 8 ticket creation", () => {
   });
 
   test("empty state and retry flow recovers from API failure", async ({ page }) => {
+    await mockAuthenticatedApi(page);
     let callCount = 0;
-
-    await page.route("**/api/requesters", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify([
-          { id: 1, name: "Alice Johnson", email: "alice@company.com" },
-          { id: 2, name: "Brandon Lee", email: "brandon@company.com" },
-        ]),
-      });
-    });
 
     await page.route("**/api/tickets*", async (route) => {
       callCount++;
@@ -286,11 +297,11 @@ test.describe("Issue 8 ticket creation", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: /Alice Johnson/ }).click();
+    await signIn(page);
 
     await expect(page.getByText("Unable to load tickets right now.")).toBeVisible();
 
-    await page.locator("#requester-select").selectOption("2");
+    await page.getByRole("button", { name: /Try again/i }).click();
 
     await expect(page.getByText("No tickets yet")).toBeVisible();
     await expect(page.getByText(/You do not have any tickets yet/)).toBeVisible();

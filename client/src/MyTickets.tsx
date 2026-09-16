@@ -55,10 +55,10 @@ export default function MyTickets({ requesterId, onViewDetail, onCreateTicket }:
       setIsError(false);
 
       try {
+        // Lab 3 (Issue 2): identity comes from the session cookie.
+        // The requesterId prop is kept for component compatibility only.
         const response = await fetch(`/api/tickets?${params.toString()}`, {
-          headers: {
-            "x-requester-id": String(requesterId),
-          },
+          credentials: "include",
           signal: abortController.signal,
         });
 
