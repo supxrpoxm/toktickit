@@ -4,6 +4,7 @@ import cors from "cors";
 import { getPrisma } from "./prisma.js";
 import { attachSession } from "./middleware/auth.js";
 import authRouter from "./routes/auth.js";
+import staffRouter from "./routes/staff.js";
 import ticketsRouter from "./routes/tickets.js";
 import { downloadAttachment, removeAttachment } from "./controllers/ticketsController.js";
 // getPrisma() is your lazy database handle. Call it INSIDE a route when you
@@ -22,6 +23,7 @@ app.use(cookieParser());
 // legacy Lab 2 requesterId when no session exists (see ticketsController).
 app.use(attachSession);
 app.use("/api/auth", authRouter);
+app.use("/api/staff", staffRouter);
 app.use("/api/tickets", ticketsRouter);
 app.get("/api/attachments/:fileId/download", downloadAttachment);
 app.delete("/api/attachments/:fileId", removeAttachment);

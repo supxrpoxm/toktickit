@@ -143,3 +143,103 @@ export async function changePassword(newPassword: string, confirmPassword: strin
     body: JSON.stringify({ newPassword, confirmPassword }),
   });
 }
+
+// ---------------------------------------------------------------------------
+// Lab 3 (Issue 3) — IT Staff Ticket Queue client.
+// ---------------------------------------------------------------------------
+
+export interface QueueOwner {
+  id: number;
+  name: string;
+}
+
+export interface QueueItem {
+  id: number;
+  ticketNumber: string;
+  title: string;
+  category: string | null;
+  requestedPriority: string;
+  itPriority: string | null;
+  status: string;
+  owner: QueueOwner | null;
+  requester: { id: number; name: string };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface QueuePagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface QueueParams {
+  search?: string;
+  status?: string;
+  itPriority?: string;
+  requestedPriority?: string;
+  owner?: string;
+  categoryId?: string;
+  sort?: string;
+  page?: number;
+  limit?: number;
+}
+
+export async function fetchStaffQueue(params: QueueParams): Promise<{ items: QueueItem[]; pagination: QueuePagination }> {
+  const query = new URLSearchParams();
+  if (params.search?.trim()) query.set("search", params.search.trim());
+  if (params.status) query.set("status", params.status);
+  if (params.itPriority) query.set("itPriority", params.itPriority);
+  if (params.requestedPriority) query.set("requestedPriority", params.requestedPriority);
+  if (params.owner) query.set("owner", params.owner);
+  if (params.categoryId) query.set("categoryId", params.categoryId);
+  if (params.sort) query.set("sort", params.sort);
+  query.set("page", String(params.page ?? 1));
+  query.set("limit", String(params.limit ?? 10));
+
+  return authRequest<{ items: QueueItem[]; pagination: QueuePagination }>(`/api/staff/tickets?${query.toString()}`);
+}
+
+export interface StaffTicketAttachment {
+  id: number;
+  fileName: string;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+  createdAt: string;
+}
+
+export interface StaffTicketDetail {
+  id: number;
+  ticketNumber: string;
+  title: string;
+  description: string;
+  status: string;
+  requestedPriority: string;
+  itPriority: string | null;
+  owner: QueueOwner | null;
+  requester: { id: number; name: string };
+  category: { id: number; name: string } | null;
+  relatedSystem: { id: number; name: string } | null;
+  attachments: StaffTicketAttachment[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function fetchStaffTicket(id: number): Promise<StaffTicketDetail> {
+  const data = await authRequest<StaffTicketDetail>(`/api/staff/tickets/${id}`);
+  return data;
+}
+
+export async function fetchCategories(): Promise<Category[]> {
+  let response: Response;
+  try {
+    response = await fetch("/api/categories", { credentials: "include" });
+  } catch {
+    throw new AuthError(0, "NETWORK_ERROR", "Unable to reach the server. Please try again.");
+  }
+  if (!response.ok) {
+    throw new AuthError(response.status, response.status === 403 ? "FORBIDDEN" : "INTERNAL_ERROR", "Unable to load categories.");
+  }
+  return (await response.json()) as Category[];
+}

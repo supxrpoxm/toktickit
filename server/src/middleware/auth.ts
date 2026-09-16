@@ -62,6 +62,19 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   return next();
 }
 
+// Role gate for staff-only endpoints (Lab 3, Issue 3). Only active
+// IT Staff and Administrator sessions pass; every other authenticated role
+// gets 403 FORBIDDEN with NO protected payload (BR-04 style separation).
+export function requireStaff(req: Request, res: Response, next: NextFunction) {
+  const role = req.authUser?.role;
+  if (role === "IT_STAFF" || role === "ADMINISTRATOR") {
+    return next();
+  }
+  return res.status(403).json({
+    success: false,
+    error: { code: "FORBIDDEN", message: "You don't have access to this area." },
+  });
+}
 // Mandatory password-change gate (BR-02): a session whose account still has
 // an initial password may only call GET /api/auth/me and
 // POST /api/auth/change-password. All other session-authenticated APIs

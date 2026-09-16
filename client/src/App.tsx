@@ -3,6 +3,8 @@ import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate,
 import CreateTicketForm from './CreateTicketForm';
 import MyTickets from './MyTickets'; // ดึงหน้า My Tickets เข้ามา
 import TicketDetail from './TicketDetail';
+import StaffTicketQueue from './StaffTicketQueue';
+import StaffTicketDetail from './StaffTicketDetail';
 import Login from './Login';
 import ChangePassword from './ChangePassword';
 import { fetchMe, logout, type AuthUser } from './api';
@@ -43,6 +45,54 @@ type TicketDetailRouteProps = {
   user: AuthUser;
   onBack: () => void;
 };
+
+function isStaffRole(role: string): boolean {
+  return role === 'IT Staff' || role === 'Administrator';
+}
+
+// Interim role home until the Administrator console lands (later Lab 3
+// issue): Requesters land on My Tickets; IT Staff and Administrators land
+// on the shared ticket queue.
+function roleHome(user: AuthUser): string {
+  return isStaffRole(user.role) ? '/staff/queue' : '/';
+}
+
+function ForbiddenPanel({ message, backTo, backLabel }: { message: string; backTo: string; backLabel: string }) {
+  const navigate = useNavigate();
+  return (
+    <div className="alert alert-warning shadow-sm text-break mt-4" role="alert">
+      <h1 className="h5 mb-2">You don&apos;t have access to this area.</h1>
+      <p className="mb-2">{message}</p>
+      <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => navigate(backTo)}>
+        {backLabel}
+      </button>
+    </div>
+  );
+}
+
+function RequireStaff({ user, children }: { user: AuthUser; children: React.ReactNode }) {
+  if (!isStaffRole(user.role)) {
+    return (
+      <ForbiddenPanel
+        message="This area is available to IT Staff and Administrators."
+        backTo={roleHome(user)}
+        backLabel="← Back to My Tickets"
+      />
+    );
+  }
+  return <>{children}</>;
+}
+
+function StaffTicketDetailRoute({ onBack }: { onBack: () => void }) {
+  const { id } = useParams();
+  const ticketId = Number(id);
+
+  if (!Number.isInteger(ticketId) || ticketId <= 0) {
+    return <Navigate to="/staff/queue" replace />;
+  }
+
+  return <StaffTicketDetail ticketId={ticketId} onBack={onBack} />;
+}
 
 function TicketDetailRoute({ user, onBack }: TicketDetailRouteProps) {
   const { id } = useParams();
@@ -103,7 +153,7 @@ function AppShell() {
       navigate('/change-password');
     } else {
       setAuth({ state: 'ready', user });
-      navigate('/');
+      navigate(roleHome(user));
     }
   }
 
@@ -112,9 +162,7 @@ function AppShell() {
     try {
       const user = await fetchMe();
       setAuth({ state: 'ready', user });
-      // Role-specific landing pages (staff queue, admin console) arrive with
-      // later Lab 3 issues; Issue 2 lands every role on My Tickets.
-      navigate('/');
+      navigate(roleHome(user));
     } catch {
       setAuth({ state: 'login', signedOutNotice: false });
       navigate('/login');
@@ -135,6 +183,7 @@ function AppShell() {
 
   const isMyTicketsActive = location.pathname === '/' || (/^\/tickets\/\d+\/?$/.test(location.pathname));
   const isCreateActive = location.pathname === '/tickets/new';
+  const isQueueActive = location.pathname === '/staff/queue' || (/^\/staff\/tickets\/\d+\/?$/.test(location.pathname));
 
   // Boot / failure shell.
   if (auth.state === 'loading') {
@@ -189,6 +238,8 @@ function AppShell() {
   }
 
   const user = auth.user;
+  const staff = isStaffRole(user.role);
+  const home = roleHome(user);
 
   return (
     <div style={{ backgroundColor: '#F5F7F6', minHeight: '100vh' }}>
@@ -196,28 +247,41 @@ function AppShell() {
       {/* Navigation Header */}
       <nav className="navbar navbar-expand navbar-dark shadow-sm zen-navbar" style={{ backgroundColor: '#006B3C' }}>
         <div className="container flex-wrap gap-2 py-2">
-          <Link className="navbar-brand fw-bold d-flex align-items-center" to="/">
+          <Link className="navbar-brand fw-bold d-flex align-items-center" to={home}>
             <i className="bi bi-clock-history me-2 fs-4" aria-hidden="true"></i> TokTickIT
           </Link>
 
           <div className="d-flex align-items-center flex-wrap">
             <ul className="navbar-nav flex-row flex-wrap me-auto mb-0">
-              <li className="nav-item me-3">
-                <Link
-                  className={`nav-link d-flex align-items-center ${isMyTicketsActive ? 'active fw-semibold' : ''}`}
-                  to="/"
-                >
-                  <i className="bi bi-file-earmark-text me-1" aria-hidden="true"></i> My Tickets
-                </Link>
-              </li>
-              <li className="nav-item">
-                <Link
-                  className={`nav-link d-flex align-items-center ${isCreateActive ? 'active fw-semibold' : ''}`}
-                  to="/tickets/new"
-                >
-                  <i className="bi bi-plus-circle me-1" aria-hidden="true"></i> Create Ticket
-                </Link>
-              </li>
+              {staff ? (
+                <li className="nav-item me-3">
+                  <Link
+                    className={`nav-link d-flex align-items-center ${isQueueActive ? 'active fw-semibold' : ''}`}
+                    to="/staff/queue"
+                  >
+                    <i className="bi bi-inboxes me-1" aria-hidden="true"></i> My Queue
+                  </Link>
+                </li>
+              ) : (
+                <>
+                  <li className="nav-item me-3">
+                    <Link
+                      className={`nav-link d-flex align-items-center ${isMyTicketsActive ? 'active fw-semibold' : ''}`}
+                      to="/"
+                    >
+                      <i className="bi bi-file-earmark-text me-1" aria-hidden="true"></i> My Tickets
+                    </Link>
+                  </li>
+                  <li className="nav-item">
+                    <Link
+                      className={`nav-link d-flex align-items-center ${isCreateActive ? 'active fw-semibold' : ''}`}
+                      to="/tickets/new"
+                    >
+                      <i className="bi bi-plus-circle me-1" aria-hidden="true"></i> Create Ticket
+                    </Link>
+                  </li>
+                </>
+              )}
             </ul>
           </div>
 
@@ -250,30 +314,58 @@ function AppShell() {
           <Route
             path="/"
             element={
-              <MyTickets
-                requesterId={user.id}
-                onViewDetail={(id) => navigate(`/tickets/${id}`)}
-                onCreateTicket={() => navigate('/tickets/new')}
-              />
+              staff ? (
+                <Navigate to="/staff/queue" replace />
+              ) : (
+                <MyTickets
+                  requesterId={user.id}
+                  onViewDetail={(id) => navigate(`/tickets/${id}`)}
+                  onCreateTicket={() => navigate('/tickets/new')}
+                />
+              )
             }
           />
           <Route
             path="/tickets/new"
             element={
-              <CreateTicketForm
-                requesterId={user.id}
-                requesterName={user.name}
-                onCreated={() => navigate('/')}
-              />
+              staff ? (
+                <Navigate to="/staff/queue" replace />
+              ) : (
+                <CreateTicketForm
+                  requesterId={user.id}
+                  requesterName={user.name}
+                  onCreated={() => navigate('/')}
+                />
+              )
             }
           />
           <Route
             path="/tickets/:id"
             element={
-              <TicketDetailRoute
-                user={user}
-                onBack={() => navigate('/')}
-              />
+              staff ? (
+                <Navigate to="/staff/queue" replace />
+              ) : (
+                <TicketDetailRoute
+                  user={user}
+                  onBack={() => navigate('/')}
+                />
+              )
+            }
+          />
+          <Route
+            path="/staff/queue"
+            element={
+              <RequireStaff user={user}>
+                <StaffTicketQueue onOpenTicket={(id) => navigate(`/staff/tickets/${id}`)} />
+              </RequireStaff>
+            }
+          />
+          <Route
+            path="/staff/tickets/:id"
+            element={
+              <RequireStaff user={user}>
+                <StaffTicketDetailRoute onBack={() => navigate('/staff/queue')} />
+              </RequireStaff>
             }
           />
           <Route
@@ -283,13 +375,13 @@ function AppShell() {
                 user={user}
                 mode="voluntary"
                 onChanged={handlePasswordChanged}
-                onCancel={() => navigate('/')}
+                onCancel={() => navigate(home)}
                 onLogout={handleLogout}
               />
             }
           />
-          <Route path="/login" element={<Navigate to="/" replace />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="/login" element={<Navigate to={home} replace />} />
+          <Route path="*" element={<Navigate to={home} replace />} />
         </Routes>
       </div>
 
