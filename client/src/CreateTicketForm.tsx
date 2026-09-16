@@ -38,11 +38,13 @@ export default function CreateTicketForm({ requesterId = 1, requesterName = '', 
     setIsSubmitting(true);
 
     try {
+      // Lab 3 (Issue 2): ownership comes from the session cookie — the
+      // requesterId prop is display-only and is never sent to the API.
       const response = await fetch('/api/tickets', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          requesterId,
           categoryId: Number(categoryId),
           relatedSystemId: relatedSystemId ? Number(relatedSystemId) : null,
           title: title.trim(),

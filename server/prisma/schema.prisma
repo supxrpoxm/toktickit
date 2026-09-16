@@ -10,14 +10,36 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Requester {
-  id        Int      @id @default(autoincrement())
-  name      String
-  email     String   @unique
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  tickets   Ticket[]
+// Lab 3 (Issue 2) — real application identity. Replaces the Lab 2 `Requester`
+// table: every Lab 2 Requester row is migrated into `User` with role REQUESTER
+// (see migration `lab3_auth_foundation`). No parallel identity tables remain.
+//
+// Role values are SCREAMING_SNAKE in the database. The API maps them to the
+// display labels "Requester" / "IT Staff" / "Administrator" (see
+// docs/lab-03/api-spec.md). `requiresPasswordChange` is the mandatory
+// first-login gate: while true, normal APIs return 403
+// PASSWORD_CHANGE_REQUIRED and the client routes to Change Password. The API
+// also exposes it under the spec alias `mustChangePassword` (same value).
+enum Role {
+  REQUESTER
+  IT_STAFF
+  ADMINISTRATOR
+}
+
+model User {
+  id                       Int      @id @default(autoincrement())
+  name                     String
+  email                    String   @unique
+  passwordHash             String   // bcrypt hash (cost >= 10); never returned by any API
+  role                     Role     @default(REQUESTER)
+  isActive                 Boolean  @default(true)
+  requiresPasswordChange   Boolean  @default(false)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+  tickets                  Ticket[]
+
+  @@index([role])
+  @@index([isActive])
 }
 
 model Category {
@@ -52,7 +74,7 @@ model Ticket {
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
-  requester      Requester      @relation(fields: [requesterId], references: [id])
+  requester      User           @relation(fields: [requesterId], references: [id])
   category       Category       @relation(fields: [categoryId], references: [id])
   relatedSystem  RelatedSystem? @relation(fields: [relatedSystemId], references: [id])
   attachments    Attachment[]

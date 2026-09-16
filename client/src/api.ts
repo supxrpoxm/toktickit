@@ -50,3 +50,96 @@ export async function fetchActiveRequesters(): Promise<Requester[]> {
 
   return (await res.json()) as Requester[];
 }
+
+// ---------------------------------------------------------------------------
+// Lab 3 (Issue 2) — session authentication client.
+// The session lives in an httpOnly cookie set by the API; every request below
+// uses credentials: "include" so the cookie is sent (same-origin through the
+// Vite /api proxy). No password, hash, or token is ever kept in JS storage.
+// ---------------------------------------------------------------------------
+
+export type UserRole = "Requester" | "IT Staff" | "Administrator";
+
+export interface AuthUser {
+  id: number;
+  name: string;
+  email: string;
+  role: UserRole | string;
+  isActive: boolean;
+  requiresPasswordChange: boolean;
+  mustChangePassword: boolean;
+}
+
+export class AuthError extends Error {
+  code: string;
+  status: number;
+  fields?: Record<string, string>;
+
+  constructor(status: number, code: string, message: string, fields?: Record<string, string>) {
+    super(message);
+    this.name = "AuthError";
+    this.status = status;
+    this.code = code;
+    this.fields = fields;
+  }
+}
+
+type AuthEnvelope<T> =
+  | { success: true; data: T }
+  | { success: false; error: { code: string; message: string; fields?: Record<string, string> } };
+
+async function authRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(path, { credentials: "include", ...init });
+  } catch {
+    throw new AuthError(0, "NETWORK_ERROR", "Unable to reach the server. Please try again.");
+  }
+
+  let body: AuthEnvelope<T>;
+  try {
+    body = (await response.json()) as AuthEnvelope<T>;
+  } catch {
+    throw new AuthError(response.status, "NETWORK_ERROR", "Unable to reach the server. Please try again.");
+  }
+
+  if (!response.ok || !body.success) {
+    const fallback: { code: string; message: string; fields?: Record<string, string> } = {
+      code: response.status === 401 ? "UNAUTHENTICATED" : "INTERNAL_ERROR",
+      message: "Something went wrong. Please try again.",
+    };
+    const error =
+      !body.success && typeof body.error === "object" && body.error !== null
+        ? (body.error as { code: string; message: string; fields?: Record<string, string> })
+        : fallback;
+    throw new AuthError(response.status, error.code, error.message, error.fields);
+  }
+
+  return (body as { success: true; data: T }).data;
+}
+
+export async function login(email: string, password: string): Promise<AuthUser> {
+  const data = await authRequest<{ user: AuthUser }>("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  return data.user;
+}
+
+export async function logout(): Promise<void> {
+  await authRequest<{ loggedOut: boolean }>("/api/auth/logout", { method: "POST" });
+}
+
+export async function fetchMe(): Promise<AuthUser> {
+  const data = await authRequest<{ user: AuthUser }>("/api/auth/me");
+  return data.user;
+}
+
+export async function changePassword(newPassword: string, confirmPassword: string): Promise<void> {
+  await authRequest<{ user: { id: number } }>("/api/auth/change-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ newPassword, confirmPassword }),
+  });
+}
