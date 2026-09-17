@@ -37,6 +37,7 @@ model User {
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
   tickets                  Ticket[]
+  ownedTickets             Ticket[]  @relation("TicketOwner")
 
   @@index([role])
   @@index([isActive])
@@ -67,17 +68,32 @@ model Ticket {
   title           String
   description     String
   status          String         @default("Open")
+  // `priority` is the Requester-supplied Requested Priority (immutable after
+  // creation). `itPriority` is the staff-owned copy, settable only by
+  // IT Staff / Administrator (Lab 3, Issue 3+).
   priority        Priority       @default(Medium)
+  itPriority      Priority?
   requesterId     Int
+  // Single primary Ticket Owner: an active IT Staff / Administrator user, or
+  // null when unassigned (Lab 3, Issue 3+).
+  ownerId         Int?
   categoryId      Int
   relatedSystemId Int?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
   requester      User           @relation(fields: [requesterId], references: [id])
+  owner          User?          @relation("TicketOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   category       Category       @relation(fields: [categoryId], references: [id])
   relatedSystem  RelatedSystem? @relation(fields: [relatedSystemId], references: [id])
   attachments    Attachment[]
+
+  @@index([ownerId])
+  @@index([status])
+  @@index([itPriority])
+  @@index([updatedAt])
+  @@index([requesterId, status])
+  @@index([ownerId, status])
 }
 
 model Attachment {

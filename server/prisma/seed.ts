@@ -126,6 +126,14 @@ async function main() {
   });
   const requesterIds = ticketOwners.map((r) => r.id);
 
+  // Staff owners: active IT Staff rotate as ticket owners; every 4th ticket
+  // stays unassigned so the queue shows mixed ownership.
+  const staffOwners = await prisma.user.findMany({
+    where: { role: "IT_STAFF", isActive: true },
+    orderBy: { id: "asc" },
+  });
+  const staffIds = staffOwners.map((s) => s.id);
+
   const priorities = ["High", "Medium", "Low"] as const;
   const statuses = ["Open", "In Progress", "Resolved", "Closed"];
 
@@ -203,6 +211,13 @@ async function main() {
     const relatedSystemId = template.system ? systemMap[template.system] ?? null : null;
     const priority = priorities[i % 3]; // rotate High, Medium, Low
     const status = statuses[i % 4]; // rotate Open, In Progress, Resolved, Closed
+    // IT Priority starts as a copy of the Requested Priority; every 6th
+    // ticket diverges to High so the queue shows both aligned and diverged rows.
+    const itPriority = i % 6 === 5 ? "High" : priority;
+    // Ownership: rotate active staff; every 5th ticket unassigned. A modulus
+    // different from the status rotation (4) keeps unassigned tickets spread
+    // across statuses instead of correlating with one of them.
+    const ownerId = staffIds.length > 0 && i % 5 !== 4 ? staffIds[i % staffIds.length] : null;
 
     const daysAgo = Math.floor(Math.random() * 60);
     const createdAt = new Date();
@@ -215,8 +230,10 @@ async function main() {
         title: template.title,
         description: template.description,
         priority,
+        itPriority,
         status,
         requesterId,
+        ownerId,
         categoryId,
         relatedSystemId,
         createdAt,

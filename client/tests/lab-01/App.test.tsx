@@ -19,7 +19,17 @@ const signedOutUser = {
   mustChangePassword: false,
 };
 
-function mockAuthApi(options: { me: "signed-out" | "signed-in" | "forced" }) {
+const signedInStaffUser = {
+  id: 7,
+  name: "IT Staff One",
+  email: "staff1@company.com",
+  role: "IT Staff",
+  isActive: true,
+  requiresPasswordChange: false,
+  mustChangePassword: false,
+};
+
+function mockAuthApi(options: { me: "signed-out" | "signed-in" | "staff" | "forced" }) {
   vi.stubGlobal(
     "fetch",
     vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
@@ -34,19 +44,38 @@ function mockAuthApi(options: { me: "signed-out" | "signed-in" | "forced" }) {
           });
         }
         const forced = options.me === "forced";
+        const user = options.me === "staff" ? signedInStaffUser : signedOutUser;
         return Promise.resolve({
           ok: true,
           json: async () => ({
             success: true,
-            data: { user: { ...signedOutUser, requiresPasswordChange: forced, mustChangePassword: forced } },
+            data: { user: { ...user, requiresPasswordChange: forced, mustChangePassword: forced } },
           }),
         });
       }
 
       if (url.includes("/api/auth/login")) {
+        const user = options.me === "staff" ? signedInStaffUser : signedOutUser;
         return Promise.resolve({
           ok: true,
-          json: async () => ({ success: true, data: { user: signedOutUser } }),
+          json: async () => ({ success: true, data: { user } }),
+        });
+      }
+
+      if (url.includes("/api/staff/tickets")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: { items: [], pagination: { page: 1, limit: 10, total: 0, totalPages: 1 } },
+          }),
+        });
+      }
+
+      if (url.includes("/api/categories")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => [{ id: 4, name: "Network" }],
         });
       }
 
@@ -128,5 +157,25 @@ describe("App", () => {
 
     expect(await screen.findByRole("heading", { name: "Choose a new password" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "My Tickets" })).not.toBeInTheDocument();
+  });
+
+  it("lands IT Staff on My Queue with role-specific navigation", async () => {
+    mockAuthApi({ me: "staff" });
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "My Queue" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /My Queue/i })).toBeInTheDocument();
+    expect(screen.getByText("IT Staff One")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /My Tickets/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Create Ticket/i })).not.toBeInTheDocument();
+  });
+
+  it("hides the staff queue from Requesters", async () => {
+    mockAuthApi({ me: "signed-in" });
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "My Tickets" });
+
+    expect(screen.queryByRole("link", { name: /My Queue/i })).not.toBeInTheDocument();
   });
 });
