@@ -75,6 +75,18 @@ export function requireStaff(req: Request, res: Response, next: NextFunction) {
     error: { code: "FORBIDDEN", message: "You don't have access to this area." },
   });
 }
+// Role gate for administrator-only endpoints (Lab 3, Issue 5). Only active
+// Administrator sessions pass; every other authenticated role gets 403
+// FORBIDDEN with NO protected payload (matrix §5.5, AC-29).
+export function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  if (req.authUser?.role === "ADMINISTRATOR") {
+    return next();
+  }
+  return res.status(403).json({
+    success: false,
+    error: { code: "FORBIDDEN", message: "You don't have access to user management." },
+  });
+}
 // Mandatory password-change gate (BR-02): a session whose account still has
 // an initial password may only call GET /api/auth/me and
 // POST /api/auth/change-password. All other session-authenticated APIs

@@ -5,6 +5,7 @@ import MyTickets from './MyTickets'; // ดึงหน้า My Tickets เข�
 import TicketDetail from './TicketDetail';
 import StaffTicketQueue from './StaffTicketQueue';
 import StaffTicketDetail from './StaffTicketDetail';
+import UserManagement from './UserManagement';
 import Login from './Login';
 import ChangePassword from './ChangePassword';
 import { fetchMe, logout, type AuthUser } from './api';
@@ -50,10 +51,16 @@ function isStaffRole(role: string): boolean {
   return role === 'IT Staff' || role === 'Administrator';
 }
 
-// Interim role home until the Administrator console lands (later Lab 3
-// issue): Requesters land on My Tickets; IT Staff and Administrators land
-// on the shared ticket queue.
+function isAdminRole(role: string): boolean {
+  return role === 'Administrator';
+}
+
+// Role homes (Lab 3, Issue 5): Requesters land on My Tickets, IT Staff on
+// the shared ticket queue, Administrators on User Management. Administrators
+// keep deep-link access to the staff queue (RequireStaff still permits the
+// role, preserving Issue 3 behavior).
 function roleHome(user: AuthUser): string {
+  if (isAdminRole(user.role)) return '/admin/users';
   return isStaffRole(user.role) ? '/staff/queue' : '/';
 }
 
@@ -77,6 +84,19 @@ function RequireStaff({ user, children }: { user: AuthUser; children: React.Reac
         message="This area is available to IT Staff and Administrators."
         backTo={roleHome(user)}
         backLabel="← Back to My Tickets"
+      />
+    );
+  }
+  return <>{children}</>;
+}
+
+function RequireAdmin({ user, children }: { user: AuthUser; children: React.ReactNode }) {
+  if (!isAdminRole(user.role)) {
+    return (
+      <ForbiddenPanel
+        message="This area is available to Administrators."
+        backTo={roleHome(user)}
+        backLabel="← Back"
       />
     );
   }
@@ -184,6 +204,7 @@ function AppShell() {
   const isMyTicketsActive = location.pathname === '/' || (/^\/tickets\/\d+\/?$/.test(location.pathname));
   const isCreateActive = location.pathname === '/tickets/new';
   const isQueueActive = location.pathname === '/staff/queue' || (/^\/staff\/tickets\/\d+\/?$/.test(location.pathname));
+  const isUsersActive = location.pathname === '/admin/users';
 
   // Boot / failure shell.
   if (auth.state === 'loading') {
@@ -239,6 +260,7 @@ function AppShell() {
 
   const user = auth.user;
   const staff = isStaffRole(user.role);
+  const admin = isAdminRole(user.role);
   const home = roleHome(user);
 
   return (
@@ -254,14 +276,26 @@ function AppShell() {
           <div className="d-flex align-items-center flex-wrap">
             <ul className="navbar-nav flex-row flex-wrap me-auto mb-0">
               {staff ? (
-                <li className="nav-item me-3">
-                  <Link
-                    className={`nav-link d-flex align-items-center ${isQueueActive ? 'active fw-semibold' : ''}`}
-                    to="/staff/queue"
-                  >
-                    <i className="bi bi-inboxes me-1" aria-hidden="true"></i> My Queue
-                  </Link>
-                </li>
+                <>
+                  <li className="nav-item me-3">
+                    <Link
+                      className={`nav-link d-flex align-items-center ${isQueueActive ? 'active fw-semibold' : ''}`}
+                      to="/staff/queue"
+                    >
+                      <i className="bi bi-inboxes me-1" aria-hidden="true"></i> My Queue
+                    </Link>
+                  </li>
+                  {admin && (
+                    <li className="nav-item me-3">
+                      <Link
+                        className={`nav-link d-flex align-items-center ${isUsersActive ? 'active fw-semibold' : ''}`}
+                        to="/admin/users"
+                      >
+                        <i className="bi bi-people me-1" aria-hidden="true"></i> User Management
+                      </Link>
+                    </li>
+                  )}
+                </>
               ) : (
                 <>
                   <li className="nav-item me-3">
@@ -315,7 +349,7 @@ function AppShell() {
             path="/"
             element={
               staff ? (
-                <Navigate to="/staff/queue" replace />
+                <Navigate to={home} replace />
               ) : (
                 <MyTickets
                   requesterId={user.id}
@@ -329,7 +363,7 @@ function AppShell() {
             path="/tickets/new"
             element={
               staff ? (
-                <Navigate to="/staff/queue" replace />
+                <Navigate to={home} replace />
               ) : (
                 <CreateTicketForm
                   requesterId={user.id}
@@ -343,7 +377,7 @@ function AppShell() {
             path="/tickets/:id"
             element={
               staff ? (
-                <Navigate to="/staff/queue" replace />
+                <Navigate to={home} replace />
               ) : (
                 <TicketDetailRoute
                   user={user}
@@ -366,6 +400,14 @@ function AppShell() {
               <RequireStaff user={user}>
                 <StaffTicketDetailRoute onBack={() => navigate('/staff/queue')} />
               </RequireStaff>
+            }
+          />
+          <Route
+            path="/admin/users"
+            element={
+              <RequireAdmin user={user}>
+                <UserManagement />
+              </RequireAdmin>
             }
           />
           <Route
