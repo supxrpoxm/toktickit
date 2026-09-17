@@ -222,6 +222,10 @@ export interface StaffTicketDetail {
   category: { id: number; name: string } | null;
   relatedSystem: { id: number; name: string } | null;
   attachments: StaffTicketAttachment[];
+  requesterResolved: boolean;
+  requesterResolvedAt: string | null;
+  commentsCount: number;
+  notesCount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -229,6 +233,106 @@ export interface StaffTicketDetail {
 export async function fetchStaffTicket(id: number): Promise<StaffTicketDetail> {
   const data = await authRequest<StaffTicketDetail>(`/api/staff/tickets/${id}`);
   return data;
+}
+
+// ---------------------------------------------------------------------------
+// Lab 3 (Issue 4) — IT Staff ticket operations: ownership, IT Priority,
+// status workflow, Public Comments, Internal Notes.
+// ---------------------------------------------------------------------------
+
+export interface StaffUser {
+  id: number;
+  name: string;
+  role: string;
+}
+
+export async function fetchStaffUsers(): Promise<StaffUser[]> {
+  const data = await authRequest<{ items: StaffUser[] }>("/api/staff/users");
+  return data.items;
+}
+
+export type OwnerUpdateBody = { claim: true } | { ownerId: number | null };
+
+export async function updateTicketOwner(id: number, body: OwnerUpdateBody): Promise<{ id: number; owner: QueueOwner | null }> {
+  return authRequest<{ id: number; owner: QueueOwner | null }>(`/api/staff/tickets/${id}/owner`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function updateItPriority(id: number, itPriority: string): Promise<{ id: number; requestedPriority: string; itPriority: string }> {
+  return authRequest(`/api/staff/tickets/${id}/priority`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ itPriority }),
+  });
+}
+
+export async function updateTicketStatus(id: number, status: string): Promise<{ id: number; status: string; updatedAt: string }> {
+  return authRequest(`/api/staff/tickets/${id}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+}
+
+export interface TicketEntry {
+  id: number;
+  ticketId: number;
+  author: { id: number; name: string; role: string };
+  body: string;
+  createdAt: string;
+}
+
+export interface EntryList {
+  items: TicketEntry[];
+  pagination: QueuePagination;
+}
+
+export async function fetchStaffComments(id: number): Promise<EntryList> {
+  return authRequest<EntryList>(`/api/staff/tickets/${id}/comments?limit=50`);
+}
+
+export async function postStaffComment(id: number, body: string): Promise<TicketEntry> {
+  return authRequest<TicketEntry>(`/api/staff/tickets/${id}/comments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ body }),
+  });
+}
+
+export async function fetchStaffNotes(id: number): Promise<EntryList> {
+  return authRequest<EntryList>(`/api/staff/tickets/${id}/notes?limit=50`);
+}
+
+export async function postStaffNote(id: number, body: string): Promise<TicketEntry> {
+  return authRequest<TicketEntry>(`/api/staff/tickets/${id}/notes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ body }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Lab 3 (Issue 4) — Requester discussion: public thread + resolved signal.
+// Internal Notes are never fetched or rendered for Requesters.
+// ---------------------------------------------------------------------------
+
+export async function fetchTicketComments(id: number): Promise<EntryList> {
+  return authRequest<EntryList>(`/api/tickets/${id}/comments?limit=50`);
+}
+
+export async function postTicketComment(id: number, body: string): Promise<TicketEntry> {
+  return authRequest<TicketEntry>(`/api/tickets/${id}/comments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ body }),
+  });
+}
+
+export async function signalProblemResolved(id: number): Promise<{ id: number; requesterResolved: boolean; requesterResolvedAt: string | null }> {
+  return authRequest(`/api/tickets/${id}/resolved-signal`, { method: "POST" });
 }
 
 export async function fetchCategories(): Promise<Category[]> {

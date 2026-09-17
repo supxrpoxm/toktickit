@@ -38,6 +38,8 @@ model User {
   updatedAt                DateTime @updatedAt
   tickets                  Ticket[]
   ownedTickets             Ticket[]  @relation("TicketOwner")
+  publicComments           PublicComment[]
+  internalNotes            InternalNote[]
 
   @@index([role])
   @@index([isActive])
@@ -77,6 +79,11 @@ model Ticket {
   // Single primary Ticket Owner: an active IT Staff / Administrator user, or
   // null when unassigned (Lab 3, Issue 3+).
   ownerId         Int?
+  // Requester "problem appears resolved" signal (Lab 3, Issue 4): a flag set
+  // by the owning Requester. It never changes `status` — only IT Staff may
+  // formally Resolve/Close (BR-20).
+  requesterResolved   Boolean   @default(false)
+  requesterResolvedAt DateTime?
   categoryId      Int
   relatedSystemId Int?
   createdAt       DateTime       @default(now())
@@ -87,6 +94,8 @@ model Ticket {
   category       Category       @relation(fields: [categoryId], references: [id])
   relatedSystem  RelatedSystem? @relation(fields: [relatedSystemId], references: [id])
   attachments    Attachment[]
+  publicComments PublicComment[]
+  internalNotes  InternalNote[]
 
   @@index([ownerId])
   @@index([status])
@@ -107,4 +116,36 @@ model Attachment {
   deletedAt DateTime?
 
   ticket    Ticket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+}
+
+// Lab 3 (Issue 4) — append-only ticket discussion. No `updatedAt`, no
+// soft-delete flag: append-only is structural, not conventional (BR-19).
+// Public Comments are visible to Requester (own tickets), IT Staff, and
+// Administrator. Internal Notes are visible ONLY to IT Staff and
+// Administrator (BR-04). `body` is 1-2000 chars after trim, enforced in the
+// API; content is rendered as plain text (HTML escaped) by clients.
+model PublicComment {
+  id        Int      @id @default(autoincrement())
+  ticketId  Int
+  authorId  Int
+  body      String
+  createdAt DateTime @default(now())
+
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author    User     @relation(fields: [authorId], references: [id])
+
+  @@index([ticketId, createdAt])
+}
+
+model InternalNote {
+  id        Int      @id @default(autoincrement())
+  ticketId  Int
+  authorId  Int
+  body      String
+  createdAt DateTime @default(now())
+
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author    User     @relation(fields: [authorId], references: [id])
+
+  @@index([ticketId, createdAt])
 }

@@ -16,6 +16,11 @@ type TicketDetailData = {
   title: string;
   description: string;
   status: TicketStatus;
+  priority?: string | null;
+  itPriority?: string | null;
+  owner?: { id?: number; name?: string | null } | null;
+  requesterResolved?: boolean;
+  requesterResolvedAt?: string | null;
   createdAt: string;
   updatedAt?: string;
   category?: { name: string } | null;
@@ -23,6 +28,16 @@ type TicketDetailData = {
   requester?: { id?: number; name?: string | null } | null;
   attachments?: TicketAttachment[];
 };
+
+type PublicComment = {
+  id: number;
+  ticketId: number;
+  author: { id: number; name: string; role: string };
+  body: string;
+  createdAt: string;
+};
+
+type CommentsState = "loading" | "ready" | "failed";
 
 type DetailState = "loading" | "success" | "error" | "not-found" | "forbidden";
 
@@ -64,6 +79,17 @@ export default function TicketDetail({ ticketId, requesterId, requesterName = ''
   const [removingAttachmentId, setRemovingAttachmentId] = useState<number | null>(null);
   const [attachmentError, setAttachmentError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Lab 3 (Issue 4) — public discussion + resolved signal. Internal Notes
+  // are never fetched or rendered for Requesters.
+  const [comments, setComments] = useState<PublicComment[]>([]);
+  const [commentsState, setCommentsState] = useState<CommentsState>("loading");
+  const [commentDraft, setCommentDraft] = useState("");
+  const [commentPosting, setCommentPosting] = useState(false);
+  const [commentError, setCommentError] = useState("");
+  const [signalSaving, setSignalSaving] = useState(false);
+  const [signalError, setSignalError] = useState("");
+  const [signalConfirmOpen, setSignalConfirmOpen] = useState(false);
 
   useEffect(() => {
     const abortController = new AbortController();
@@ -109,6 +135,33 @@ export default function TicketDetail({ ticketId, requesterId, requesterName = ''
 
     return () => abortController.abort();
   }, [ticketId, requesterId]);
+
+  // Load the public thread once the ticket is visible to this requester.
+  useEffect(() => {
+    if (state !== "success" || !ticket) return;
+    const abortController = new AbortController();
+
+    async function loadComments() {
+      setCommentsState("loading");
+      setCommentError("");
+      try {
+        const response = await fetch(`/api/tickets/${ticketId}/comments?limit=50`, {
+          credentials: "include",
+          signal: abortController.signal,
+        });
+        if (!response.ok) throw new Error("Unable to load comments");
+        const result = (await response.json()) as { success: boolean; data: { items: PublicComment[] } };
+        setComments(result.data.items ?? []);
+        setCommentsState("ready");
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") return;
+        setCommentsState("failed");
+      }
+    }
+
+    loadComments();
+    return () => abortController.abort();
+  }, [ticketId, state, ticket?.id]);
 
   async function handleAttachmentUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
@@ -221,6 +274,60 @@ export default function TicketDetail({ ticketId, requesterId, requesterName = ''
       setAttachmentError("Unable to remove this attachment right now.");
     } finally {
       setRemovingAttachmentId(null);
+    }
+  }
+
+  async function handlePostComment() {
+    if (!ticket || commentPosting || commentDraft.trim().length === 0) return;
+    setCommentPosting(true);
+    setCommentError("");
+    try {
+      const response = await fetch(`/api/tickets/${ticketId}/comments`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: commentDraft }),
+      });
+      if (!response.ok) {
+        const problem = (await response.json().catch(() => null)) as {
+          error?: { fields?: { body?: string }; message?: string };
+        } | null;
+        throw new Error(problem?.error?.fields?.body ?? problem?.error?.message ?? "Unable to post this reply right now.");
+      }
+      const result = (await response.json()) as { success: boolean; data: PublicComment };
+      setComments((current) => [...current, result.data]);
+      setCommentDraft("");
+    } catch (error) {
+      setCommentError(error instanceof Error ? error.message : "Unable to post this reply right now.");
+    } finally {
+      setCommentPosting(false);
+    }
+  }
+
+  async function handleSignalResolved() {
+    if (!ticket || signalSaving) return;
+    setSignalSaving(true);
+    setSignalError("");
+    try {
+      const response = await fetch(`/api/tickets/${ticketId}/resolved-signal`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Unable to send this signal right now.");
+      const result = (await response.json()) as {
+        success: boolean;
+        data: { requesterResolved: boolean; requesterResolvedAt: string | null };
+      };
+      setTicket((current) =>
+        current
+          ? { ...current, requesterResolved: result.data.requesterResolved, requesterResolvedAt: result.data.requesterResolvedAt }
+          : current,
+      );
+      setSignalConfirmOpen(false);
+    } catch (error) {
+      setSignalError("Unable to send this signal right now. Please try again.");
+    } finally {
+      setSignalSaving(false);
     }
   }
 
@@ -355,8 +462,92 @@ export default function TicketDetail({ ticketId, requesterId, requesterName = ''
                   <p className="mb-0">{ticket.relatedSystem.name}</p>
                 </div>
               )}
+
+              <div className="col-12 col-md-6">
+                <label htmlFor="ticket-owner-name" className="form-label text-muted small mb-1">Ticket Owner</label>
+                <input
+                  id="ticket-owner-name"
+                  type="text"
+                  className="form-control zen-readonly"
+                  value={ticket.owner?.name ?? "Unassigned"}
+                  style={{ backgroundColor: '#EAF6EF' }}
+                  disabled
+                  readOnly
+                  aria-readonly="true"
+                  title="Set by IT staff"
+                />
+              </div>
+
+              <div className="col-12 col-md-6">
+                <label htmlFor="ticket-it-priority" className="form-label text-muted small mb-1">IT Priority</label>
+                <input
+                  id="ticket-it-priority"
+                  type="text"
+                  className="form-control zen-readonly"
+                  value={ticket.itPriority ?? "—"}
+                  style={{ backgroundColor: '#EAF6EF' }}
+                  disabled
+                  readOnly
+                  aria-readonly="true"
+                  title="Set by IT staff"
+                />
+              </div>
             </div>
           </section>
+
+          {/* Requester resolved signal (flag only — Requesters cannot formally close tickets). */}
+          <section aria-labelledby="resolved-signal-heading" className="border rounded-3 p-3 p-md-4 mt-4" style={{ backgroundColor: '#EAF6EF', borderColor: '#0B7A46' }}>
+            <h2 id="resolved-signal-heading" className="h6 mb-2">Resolution</h2>
+            {ticket.requesterResolved ? (
+              <p className="mb-0">
+                <span className="badge rounded-pill bg-warning-subtle text-warning-emphasis border">
+                  <i className="bi bi-info-circle me-1" aria-hidden="true" />
+                  You indicated this problem appears resolved
+                </span>
+                <span className="d-block small text-muted mt-2">
+                  IT staff will review and formally resolve or close the ticket.
+                </span>
+              </p>
+            ) : (
+              <>
+                <p className="small text-muted mb-2">
+                  If the problem looks fixed, let IT staff know. This does not close the ticket — only IT staff can resolve or close it.
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-zen-secondary"
+                  onClick={() => setSignalConfirmOpen(true)}
+                  disabled={signalSaving}
+                >
+                  {signalSaving ? "Sending..." : "Problem appears resolved"}
+                </button>
+                {signalError && (
+                  <div className="alert alert-danger mt-2 mb-0" role="alert">{signalError}</div>
+                )}
+              </>
+            )}
+          </section>
+
+          {signalConfirmOpen && !ticket.requesterResolved && (
+            <div className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center p-3" style={{ backgroundColor: "rgba(0,0,0,0.45)", zIndex: 1050 }} role="dialog" aria-modal="true" aria-labelledby="signal-confirm-heading">
+              <div className="card shadow border-0 w-100" style={{ maxWidth: 480 }}>
+                <div className="card-body p-4">
+                  <h2 id="signal-confirm-heading" className="h5 mb-2">Signal that the problem appears resolved?</h2>
+                  <p className="text-muted small mb-0">
+                    IT staff will see your signal and decide whether to resolve or close the ticket. The ticket stays open until they act.
+                  </p>
+                  <div className="d-flex justify-content-end gap-2 mt-3">
+                    <button type="button" className="btn btn-outline-secondary" onClick={() => setSignalConfirmOpen(false)} disabled={signalSaving}>
+                      Cancel
+                    </button>
+                    <button type="button" className="btn btn-zen-primary" onClick={handleSignalResolved} disabled={signalSaving}>
+                      {signalSaving ? "Sending..." : "Confirm"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <hr className="my-4" />
 
@@ -445,6 +636,72 @@ export default function TicketDetail({ ticketId, requesterId, requesterName = ''
                 ))}
               </div>
             )}
+          </section>
+
+          {/* Public discussion with IT staff. Internal Notes are never shown here. */}
+          <section
+            aria-labelledby="requester-comments-heading"
+            className="border rounded-3 bg-light p-3 p-md-4 mt-4"
+          >
+            <h2 id="requester-comments-heading" className="h5 mb-1 text-dark">
+              <i className="bi bi-chat-left-text me-2 text-success" aria-hidden="true" />
+              Public comments
+            </h2>
+            <p className="text-muted small mb-3">Visible to you and IT staff.</p>
+
+            {commentsState === "loading" && (
+              <p className="text-muted mb-0" role="status">Loading public comments...</p>
+            )}
+            {commentsState === "failed" && (
+              <div className="alert alert-danger" role="alert">
+                Unable to load public comments right now.
+              </div>
+            )}
+            {commentsState === "ready" && comments.length === 0 && (
+              <p className="text-muted mb-3">No public comments yet.</p>
+            )}
+            {commentsState === "ready" && comments.length > 0 && (
+              <ul className="list-unstyled mb-3 d-flex flex-column gap-3">
+                {comments.map((comment) => (
+                  <li key={comment.id} className="border rounded-3 p-3 bg-white">
+                    <p className="small mb-1">
+                      <span className="fw-semibold">{comment.author.name}</span>{" "}
+                      <span className="badge rounded-pill bg-success-subtle text-success-emphasis ms-1">
+                        {comment.author.role}
+                      </span>{" "}
+                      <span className="text-muted">· {formatDate(comment.createdAt)}</span>
+                    </p>
+                    <p className="mb-0 text-break" style={{ whiteSpace: "pre-wrap" }}>{comment.body}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <div>
+              <label htmlFor="requester-comment-composer" className="form-label small text-muted">
+                Reply to IT staff (up to 2000 characters)
+              </label>
+              <textarea
+                id="requester-comment-composer"
+                className="form-control"
+                rows={3}
+                maxLength={2000}
+                value={commentDraft}
+                onChange={(event) => setCommentDraft(event.target.value)}
+                disabled={commentPosting}
+              />
+              {commentError && (
+                <div className="alert alert-danger mt-2 mb-0" role="alert">{commentError}</div>
+              )}
+              <button
+                type="button"
+                className="btn btn-outline-success mt-2"
+                onClick={handlePostComment}
+                disabled={commentPosting || commentDraft.trim().length === 0}
+              >
+                {commentPosting ? "Posting..." : "Post reply"}
+              </button>
+            </div>
           </section>
         </div>
       </div>
