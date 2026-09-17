@@ -347,3 +347,76 @@ export async function fetchCategories(): Promise<Category[]> {
   }
   return (await response.json()) as Category[];
 }
+
+// ---------------------------------------------------------------------------
+// Lab 3 (Issue 5) — minimalist Administrator User Management client.
+// Canonical paths are /api/admin/users; /api/users aliases serve the same
+// contract. No password, hash, or token is ever kept in JS storage.
+// ---------------------------------------------------------------------------
+
+export interface ManagedUser {
+  id: number;
+  name: string;
+  email: string;
+  role: UserRole | string;
+  isActive: boolean;
+  requiresPasswordChange: boolean;
+  mustChangePassword: boolean;
+}
+
+export interface CreateUserBody {
+  name: string;
+  email: string;
+  role: string;
+  isActive?: boolean;
+  initialPassword: string;
+}
+
+export interface UpdateUserBody {
+  name?: string;
+  email?: string;
+  role?: string;
+  isActive?: boolean;
+}
+
+export interface UserListParams {
+  search?: string;
+  role?: string;
+}
+
+export async function fetchManagedUsers(params: UserListParams = {}): Promise<ManagedUser[]> {
+  const query = new URLSearchParams();
+  if (params.search?.trim()) query.set("search", params.search.trim());
+  if (params.role) query.set("role", params.role);
+  const suffix = query.toString();
+  const data = await authRequest<{ items: ManagedUser[] }>(
+    `/api/admin/users${suffix ? `?${suffix}` : ""}`,
+  );
+  return data.items;
+}
+
+export async function createManagedUser(body: CreateUserBody): Promise<ManagedUser> {
+  const data = await authRequest<{ user: ManagedUser }>("/api/admin/users", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return data.user;
+}
+
+export async function updateManagedUser(id: number, body: UpdateUserBody): Promise<ManagedUser> {
+  const data = await authRequest<{ user: ManagedUser }>(`/api/admin/users/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return data.user;
+}
+
+export async function resetManagedUserPassword(id: number, initialPassword: string): Promise<void> {
+  await authRequest(`/api/admin/users/${id}/set-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ initialPassword }),
+  });
+}
