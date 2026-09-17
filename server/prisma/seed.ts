@@ -135,7 +135,18 @@ async function main() {
   const staffIds = staffOwners.map((s) => s.id);
 
   const priorities = ["High", "Medium", "Low"] as const;
-  const statuses = ["Open", "In Progress", "Resolved", "Closed"];
+  // All 8 Lab 3 statuses so the queue and detail screens show every badge
+  // and transition source (specification §7.6).
+  const statuses = [
+    "New",
+    "Open",
+    "In Progress",
+    "Waiting for Requester",
+    "Resolved",
+    "Closed",
+    "Reopened",
+    "Cancelled",
+  ];
 
   const ticketTemplates = [
     { title: "Cannot login to VPN", description: "I am unable to connect to the company VPN since this morning. I have tried restarting my computer and reinstalling the VPN client but the issue persists.", category: "Network", system: "VPN" },
@@ -188,7 +199,10 @@ async function main() {
     { title: "Request new mouse and mousepad", description: "My mouse double-clicks when I single-click and the mousepad is worn out. I need both replaced.", category: "Hardware", system: "Asset Management" },
   ];
 
-  // Clear existing tickets first (attachments cascade via FK)
+  // Clear existing tickets first (comments, notes, and attachments cascade
+  // via FK, deleted explicitly for idempotent re-seeds)
+  await prisma.publicComment.deleteMany();
+  await prisma.internalNote.deleteMany();
   await prisma.attachment.deleteMany();
   await prisma.ticket.deleteMany();
 
@@ -210,7 +224,7 @@ async function main() {
     const categoryId = categoryMap[template.category];
     const relatedSystemId = template.system ? systemMap[template.system] ?? null : null;
     const priority = priorities[i % 3]; // rotate High, Medium, Low
-    const status = statuses[i % 4]; // rotate Open, In Progress, Resolved, Closed
+    const status = statuses[i % 8]; // rotate through all 8 Lab 3 statuses
     // IT Priority starts as a copy of the Requested Priority; every 6th
     // ticket diverges to High so the queue shows both aligned and diverged rows.
     const itPriority = i % 6 === 5 ? "High" : priority;
@@ -242,6 +256,42 @@ async function main() {
     });
 
     ticketCount++;
+  }
+
+  // --- Example discussion (neutral content, no sensitive data) ---
+  // A few tickets get public comments (requester + staff voices) and
+  // staff-only internal notes so the threads render on first boot.
+  if (staffIds.length > 0) {
+    const sampleTickets = await prisma.ticket.findMany({
+      orderBy: { id: "asc" },
+      take: 6,
+      select: { id: true, requesterId: true },
+    });
+    const staffAuthor = staffIds[0];
+    let commentSeed = 0;
+    for (const sample of sampleTickets) {
+      await prisma.publicComment.create({
+        data: {
+          ticketId: sample.id,
+          authorId: commentSeed % 2 === 0 ? sample.requesterId : staffAuthor,
+          body:
+            commentSeed % 2 === 0
+              ? "This is still happening after a restart. Happy to provide more details if helpful."
+              : "Thanks for reporting this — I'm looking into it now and will post updates here.",
+        },
+      });
+      // Every other sampled ticket also gets one internal note.
+      if (commentSeed % 2 === 0) {
+        await prisma.internalNote.create({
+          data: {
+            ticketId: sample.id,
+            authorId: staffAuthor,
+            body: "Reproduced in the test environment; checking the related system logs next.",
+          },
+        });
+      }
+      commentSeed++;
+    }
   }
 
   const activeRequesters = userSeeds.filter((u) => u.role === "REQUESTER" && u.isActive).length;
