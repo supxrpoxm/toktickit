@@ -4,12 +4,12 @@
 **Reviewer Name:** Rattananan Siriponvat
 
 ## Pull Request Links
-- Issue 1: Sprint 3 Engineering Contract - [Link]
-- Issue 2: Authentication Foundation & UI - [Link]
-- Issue 3: IT Staff Ticket Queue - [Link]
-- Issue 4: IT Staff Ticket Operations - [Link]
-- Issue 5: Administrator User Management - [Link]
-- Issue 6: Final Fixes & Documentation - [Link]
+- Issue 1: Sprint 3 Engineering Contract - [https://github.com/supxrpoxm/toktickit/pull/33]
+- Issue 2: Authentication Foundation & UI - [https://github.com/supxrpoxm/toktickit/pull/35]
+- Issue 3: IT Staff Ticket Queue - [https://github.com/supxrpoxm/toktickit/pull/37]
+- Issue 4: IT Staff Ticket Operations - [https://github.com/supxrpoxm/toktickit/pull/39]
+- Issue 5: Administrator User Management - [https://github.com/supxrpoxm/toktickit/pull/41]
+- Issue 6: Final Fixes & Documentation - [https://github.com/supxrpoxm/toktickit/pull/42]
 
 ## Test Accounts
 - **Administrator:** admin@example.com / password123
