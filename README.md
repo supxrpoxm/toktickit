@@ -75,3 +75,29 @@ toktickit/
 ├── .gitignore
 └── README.md
 ```
+
+🔑 Test Accounts (Lab 3 Authentication)
+Administrator: admin@example.com / password123
+
+IT Staff: staff@example.com / password123
+
+Requester: user@example.com / password123
+(Note: Initial login will force a password change).
+
+🛠️ Setup & Installation Instructions
+Prerequisites: Node.js, PostgreSQL.
+1. Environment: cp server/.env.example server/.env
+2. Install: cd client && npm install, then cd ../server && npm install
+3. Database: cd server, npx prisma migrate dev --name init, npx prisma db seed
+
+▶️ Running the Application
+Backend: cd server && npm run dev
+Frontend: cd client && npm run dev
+
+🧪 Running Tests
+Frontend (Vitest): cd client && npm run test
+Backend API (Supertest): cd server && npm run test
+E2E (Playwright): cd client && npx playwright test
+
+docs/lab-03/reviewer.md (Create or overwrite)
+Leave the bracket placeholders exact for the user to fill in manually.
