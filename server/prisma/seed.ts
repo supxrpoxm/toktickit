@@ -1,7 +1,55 @@
+import bcrypt from "bcryptjs";
 import { getPrisma } from "../src/prisma.js";
+
+// ---------------------------------------------------------------------------
+// TokTickIT seed — idempotent (safe to run multiple times).
+//
+// LOCAL-ONLY DEVELOPMENT CREDENTIALS: every seeded account uses the initial
+// password documented below. These credentials exist only for local
+// development and automated tests. Never commit real passwords, and never
+// reuse these values in production.
+//
+//   Initial password for ALL seeded accounts:  Password123!
+//   Accounts with requiresPasswordChange = true must set a new password at
+//   next login (mandatory first-login change flow). One account per role is
+//   pre-changed (flag = false) so developers/tests can sign in directly:
+//     - alice@company.com (Requester), staff1@company.com (IT Staff),
+//       admin@company.com (Administrator).
+// ---------------------------------------------------------------------------
+
+const INITIAL_PASSWORD = "Password123!";
+const BCRYPT_COST = 10;
+
+type UserSeed = {
+  name: string;
+  email: string;
+  role: "REQUESTER" | "IT_STAFF" | "ADMINISTRATOR";
+  isActive: boolean;
+  requiresPasswordChange: boolean;
+};
+
+const userSeeds: UserSeed[] = [
+  // --- Requesters (migrated Lab 2 identities; emails must stay stable) ---
+  // "New Employee" is an active requester with zero tickets by design,
+  // so signing in as them always triggers the My Tickets empty state.
+  { name: "Alice Johnson", email: "alice@company.com", role: "REQUESTER", isActive: true, requiresPasswordChange: false },
+  { name: "Brandon Lee", email: "brandon@company.com", role: "REQUESTER", isActive: true, requiresPasswordChange: true },
+  { name: "Carmen Diaz", email: "carmen@company.com", role: "REQUESTER", isActive: true, requiresPasswordChange: true },
+  { name: "Darius Patel", email: "darius@company.com", role: "REQUESTER", isActive: true, requiresPasswordChange: true },
+  { name: "New Employee", email: "new.employee@company.com", role: "REQUESTER", isActive: true, requiresPasswordChange: true },
+  { name: "Evelyn Gray", email: "evelyn@company.com", role: "REQUESTER", isActive: false, requiresPasswordChange: true },
+  // --- IT Staff ---
+  { name: "IT Staff One", email: "staff1@company.com", role: "IT_STAFF", isActive: true, requiresPasswordChange: false },
+  { name: "IT Staff Two", email: "staff2@company.com", role: "IT_STAFF", isActive: true, requiresPasswordChange: true },
+  { name: "IT Staff Three", email: "staff3@company.com", role: "IT_STAFF", isActive: true, requiresPasswordChange: true },
+  { name: "Former Staff", email: "staff.off@company.com", role: "IT_STAFF", isActive: false, requiresPasswordChange: true },
+  // --- Administrator ---
+  { name: "Admin User", email: "admin@company.com", role: "ADMINISTRATOR", isActive: true, requiresPasswordChange: false },
+];
 
 async function main() {
   const prisma = getPrisma();
+  const passwordHash = await bcrypt.hash(INITIAL_PASSWORD, BCRYPT_COST);
 
   // --- Categories ---
   const categoryNames = [
@@ -37,34 +85,30 @@ async function main() {
     });
   }
 
-  // --- Requesters ---
-  // NOTE: "New Employee" is an active requester with zero tickets by design,
-  // so logging in as them always triggers the My Tickets empty state.
-  const requesterSeeds = [
-    { name: "Alice Johnson", email: "alice@company.com", isActive: true },
-    { name: "Brandon Lee", email: "brandon@company.com", isActive: true },
-    { name: "Carmen Diaz", email: "carmen@company.com", isActive: true },
-    { name: "Darius Patel", email: "darius@company.com", isActive: true },
-    { name: "New Employee", email: "new.employee@company.com", isActive: true },
-    { name: "Evelyn Gray", email: "evelyn@company.com", isActive: false },
-  ];
-
-  for (const requester of requesterSeeds) {
-    await prisma.requester.upsert({
-      where: { email: requester.email },
+  // --- Users (email lookup is normalized to lowercase) ---
+  for (const seed of userSeeds) {
+    const email = seed.email.trim().toLowerCase();
+    await prisma.user.upsert({
+      where: { email },
       update: {
-        name: requester.name,
-        isActive: requester.isActive,
+        name: seed.name,
+        role: seed.role,
+        isActive: seed.isActive,
+        passwordHash,
+        requiresPasswordChange: seed.requiresPasswordChange,
       },
       create: {
-        name: requester.name,
-        email: requester.email,
-        isActive: requester.isActive,
+        name: seed.name,
+        email,
+        role: seed.role,
+        isActive: seed.isActive,
+        passwordHash,
+        requiresPasswordChange: seed.requiresPasswordChange,
       },
     });
   }
 
-  // --- 50 Mock Tickets ---
+  // --- Tickets (owned by Users with the Requester role) ---
   const categories = await prisma.category.findMany({ orderBy: { id: "asc" } });
   const systems = await prisma.relatedSystem.findMany({ orderBy: { id: "asc" } });
 
@@ -76,14 +120,33 @@ async function main() {
     "carmen@company.com",
     "darius@company.com",
   ];
-  const ticketOwners = await prisma.requester.findMany({
+  const ticketOwners = await prisma.user.findMany({
     where: { email: { in: ticketOwnerEmails } },
     orderBy: { id: "asc" },
   });
   const requesterIds = ticketOwners.map((r) => r.id);
 
+  // Staff owners: active IT Staff rotate as ticket owners; every 4th ticket
+  // stays unassigned so the queue shows mixed ownership.
+  const staffOwners = await prisma.user.findMany({
+    where: { role: "IT_STAFF", isActive: true },
+    orderBy: { id: "asc" },
+  });
+  const staffIds = staffOwners.map((s) => s.id);
+
   const priorities = ["High", "Medium", "Low"] as const;
-  const statuses = ["Open", "In Progress", "Resolved", "Closed"];
+  // All 8 Lab 3 statuses so the queue and detail screens show every badge
+  // and transition source (specification §7.6).
+  const statuses = [
+    "New",
+    "Open",
+    "In Progress",
+    "Waiting for Requester",
+    "Resolved",
+    "Closed",
+    "Reopened",
+    "Cancelled",
+  ];
 
   const ticketTemplates = [
     { title: "Cannot login to VPN", description: "I am unable to connect to the company VPN since this morning. I have tried restarting my computer and reinstalling the VPN client but the issue persists.", category: "Network", system: "VPN" },
@@ -136,7 +199,10 @@ async function main() {
     { title: "Request new mouse and mousepad", description: "My mouse double-clicks when I single-click and the mousepad is worn out. I need both replaced.", category: "Hardware", system: "Asset Management" },
   ];
 
-  // Clear existing tickets first
+  // Clear existing tickets first (comments, notes, and attachments cascade
+  // via FK, deleted explicitly for idempotent re-seeds)
+  await prisma.publicComment.deleteMany();
+  await prisma.internalNote.deleteMany();
   await prisma.attachment.deleteMany();
   await prisma.ticket.deleteMany();
 
@@ -158,7 +224,14 @@ async function main() {
     const categoryId = categoryMap[template.category];
     const relatedSystemId = template.system ? systemMap[template.system] ?? null : null;
     const priority = priorities[i % 3]; // rotate High, Medium, Low
-    const status = statuses[i % 4]; // rotate Open, In Progress, Resolved, Closed
+    const status = statuses[i % 8]; // rotate through all 8 Lab 3 statuses
+    // IT Priority starts as a copy of the Requested Priority; every 6th
+    // ticket diverges to High so the queue shows both aligned and diverged rows.
+    const itPriority = i % 6 === 5 ? "High" : priority;
+    // Ownership: rotate active staff; every 5th ticket unassigned. A modulus
+    // different from the status rotation (4) keeps unassigned tickets spread
+    // across statuses instead of correlating with one of them.
+    const ownerId = staffIds.length > 0 && i % 5 !== 4 ? staffIds[i % staffIds.length] : null;
 
     const daysAgo = Math.floor(Math.random() * 60);
     const createdAt = new Date();
@@ -171,8 +244,10 @@ async function main() {
         title: template.title,
         description: template.description,
         priority,
+        itPriority,
         status,
         requesterId,
+        ownerId,
         categoryId,
         relatedSystemId,
         createdAt,
@@ -183,8 +258,57 @@ async function main() {
     ticketCount++;
   }
 
+  // --- Example discussion (neutral content, no sensitive data) ---
+  // A few tickets get public comments (requester + staff voices) and
+  // staff-only internal notes so the threads render on first boot.
+  if (staffIds.length > 0) {
+    const sampleTickets = await prisma.ticket.findMany({
+      orderBy: { id: "asc" },
+      take: 6,
+      select: { id: true, requesterId: true },
+    });
+    const staffAuthor = staffIds[0];
+    let commentSeed = 0;
+    for (const sample of sampleTickets) {
+      await prisma.publicComment.create({
+        data: {
+          ticketId: sample.id,
+          authorId: commentSeed % 2 === 0 ? sample.requesterId : staffAuthor,
+          body:
+            commentSeed % 2 === 0
+              ? "This is still happening after a restart. Happy to provide more details if helpful."
+              : "Thanks for reporting this — I'm looking into it now and will post updates here.",
+        },
+      });
+      // Every other sampled ticket also gets one internal note.
+      if (commentSeed % 2 === 0) {
+        await prisma.internalNote.create({
+          data: {
+            ticketId: sample.id,
+            authorId: staffAuthor,
+            body: "Reproduced in the test environment; checking the related system logs next.",
+          },
+        });
+      }
+      commentSeed++;
+    }
+  }
+
+  const activeRequesters = userSeeds.filter((u) => u.role === "REQUESTER" && u.isActive).length;
+  const inactiveRequesters = userSeeds.filter((u) => u.role === "REQUESTER" && !u.isActive).length;
+  const activeStaff = userSeeds.filter((u) => u.role === "IT_STAFF" && u.isActive).length;
+  const inactiveStaff = userSeeds.filter((u) => u.role === "IT_STAFF" && !u.isActive).length;
+  const admins = userSeeds.filter((u) => u.role === "ADMINISTRATOR" && u.isActive).length;
+
   console.log(
-    `Seeded ${categoryNames.length} categories, ${relatedSystemNames.length} related systems, ${requesterSeeds.length} requesters, and ${ticketCount} tickets.`,
+    `Seeded ${categoryNames.length} categories, ${relatedSystemNames.length} related systems, ` +
+      `${userSeeds.length} users (${activeRequesters} active + ${inactiveRequesters} inactive Requesters, ` +
+      `${activeStaff} active + ${inactiveStaff} inactive IT Staff, ${admins} active Administrator), ` +
+      `and ${ticketCount} tickets.`,
+  );
+  console.log(
+    `Local-only credentials: every seeded account uses initial password "${INITIAL_PASSWORD}" ` +
+      `(accounts flagged requiresPasswordChange must change it at next login).`,
   );
 }
 

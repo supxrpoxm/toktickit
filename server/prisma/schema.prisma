@@ -10,14 +10,39 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Requester {
-  id        Int      @id @default(autoincrement())
-  name      String
-  email     String   @unique
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  tickets   Ticket[]
+// Lab 3 (Issue 2) — real application identity. Replaces the Lab 2 `Requester`
+// table: every Lab 2 Requester row is migrated into `User` with role REQUESTER
+// (see migration `lab3_auth_foundation`). No parallel identity tables remain.
+//
+// Role values are SCREAMING_SNAKE in the database. The API maps them to the
+// display labels "Requester" / "IT Staff" / "Administrator" (see
+// docs/lab-03/api-spec.md). `requiresPasswordChange` is the mandatory
+// first-login gate: while true, normal APIs return 403
+// PASSWORD_CHANGE_REQUIRED and the client routes to Change Password. The API
+// also exposes it under the spec alias `mustChangePassword` (same value).
+enum Role {
+  REQUESTER
+  IT_STAFF
+  ADMINISTRATOR
+}
+
+model User {
+  id                       Int      @id @default(autoincrement())
+  name                     String
+  email                    String   @unique
+  passwordHash             String   // bcrypt hash (cost >= 10); never returned by any API
+  role                     Role     @default(REQUESTER)
+  isActive                 Boolean  @default(true)
+  requiresPasswordChange   Boolean  @default(false)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+  tickets                  Ticket[]
+  ownedTickets             Ticket[]  @relation("TicketOwner")
+  publicComments           PublicComment[]
+  internalNotes            InternalNote[]
+
+  @@index([role])
+  @@index([isActive])
 }
 
 model Category {
@@ -45,17 +70,39 @@ model Ticket {
   title           String
   description     String
   status          String         @default("Open")
+  // `priority` is the Requester-supplied Requested Priority (immutable after
+  // creation). `itPriority` is the staff-owned copy, settable only by
+  // IT Staff / Administrator (Lab 3, Issue 3+).
   priority        Priority       @default(Medium)
+  itPriority      Priority?
   requesterId     Int
+  // Single primary Ticket Owner: an active IT Staff / Administrator user, or
+  // null when unassigned (Lab 3, Issue 3+).
+  ownerId         Int?
+  // Requester "problem appears resolved" signal (Lab 3, Issue 4): a flag set
+  // by the owning Requester. It never changes `status` — only IT Staff may
+  // formally Resolve/Close (BR-20).
+  requesterResolved   Boolean   @default(false)
+  requesterResolvedAt DateTime?
   categoryId      Int
   relatedSystemId Int?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
-  requester      Requester      @relation(fields: [requesterId], references: [id])
+  requester      User           @relation(fields: [requesterId], references: [id])
+  owner          User?          @relation("TicketOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   category       Category       @relation(fields: [categoryId], references: [id])
   relatedSystem  RelatedSystem? @relation(fields: [relatedSystemId], references: [id])
   attachments    Attachment[]
+  publicComments PublicComment[]
+  internalNotes  InternalNote[]
+
+  @@index([ownerId])
+  @@index([status])
+  @@index([itPriority])
+  @@index([updatedAt])
+  @@index([requesterId, status])
+  @@index([ownerId, status])
 }
 
 model Attachment {
@@ -69,4 +116,36 @@ model Attachment {
   deletedAt DateTime?
 
   ticket    Ticket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+}
+
+// Lab 3 (Issue 4) — append-only ticket discussion. No `updatedAt`, no
+// soft-delete flag: append-only is structural, not conventional (BR-19).
+// Public Comments are visible to Requester (own tickets), IT Staff, and
+// Administrator. Internal Notes are visible ONLY to IT Staff and
+// Administrator (BR-04). `body` is 1-2000 chars after trim, enforced in the
+// API; content is rendered as plain text (HTML escaped) by clients.
+model PublicComment {
+  id        Int      @id @default(autoincrement())
+  ticketId  Int
+  authorId  Int
+  body      String
+  createdAt DateTime @default(now())
+
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author    User     @relation(fields: [authorId], references: [id])
+
+  @@index([ticketId, createdAt])
+}
+
+model InternalNote {
+  id        Int      @id @default(autoincrement())
+  ticketId  Int
+  authorId  Int
+  body      String
+  createdAt DateTime @default(now())
+
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author    User     @relation(fields: [authorId], references: [id])
+
+  @@index([ticketId, createdAt])
 }
