@@ -40,6 +40,7 @@ model User {
   ownedTickets             Ticket[]  @relation("TicketOwner")
   publicComments           PublicComment[]
   internalNotes            InternalNote[]
+  actionsTaken             ActionTaken[]
 
   @@index([role])
   @@index([isActive])
@@ -96,6 +97,7 @@ model Ticket {
   attachments    Attachment[]
   publicComments PublicComment[]
   internalNotes  InternalNote[]
+  actionsTaken   ActionTaken[]
 
   @@index([ownerId])
   @@index([status])
@@ -148,4 +150,34 @@ model InternalNote {
   author    User     @relation(fields: [authorId], references: [id])
 
   @@index([ticketId, createdAt])
+}
+
+// Lab 4 (Issue 2) — Actions Taken foundation.
+// A ticket can have zero, one, or many Actions Taken. Each record captures
+// what was done, by whom, when, the outcome, whether follow-up is required
+// (with a mandatory note when true), and free-form attachment notes.
+// `version` is the optimistic-locking token used by PATCH; it starts at 1 and
+// increments on every successful update so stale edits can be rejected safely.
+// PostgreSQL also enforces followUpNote non-blank when followUpRequired is
+// true via the check_followup_note_required constraint (Prisma does not model
+// CHECK constraints, so it lives in the migration SQL).
+model ActionTaken {
+  id               Int      @id @default(autoincrement())
+  ticketId         Int
+  actionAt         DateTime @default(now())
+  description      String
+  result           String
+  performedById    Int
+  followUpRequired Boolean  @default(false)
+  followUpNote     String?
+  attachmentNotes  String?
+  version          Int      @default(1)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  ticket      Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  performedBy User   @relation(fields: [performedById], references: [id])
+
+  @@index([ticketId, actionAt])
+  @@index([performedById])
 }
