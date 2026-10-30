@@ -1,6 +1,11 @@
 import { Router, type Request, type Response } from "express";
 import { roleToLabel } from "../auth.js";
 import { passwordChangeGate, requireAuth, requireStaff } from "../middleware/auth.js";
+import {
+  createAction,
+  listActions,
+  updateAction,
+} from "../controllers/actionsController.js";
 import { getPrisma } from "../prisma.js";
 import {
   allowedTransitions,
@@ -266,6 +271,18 @@ router.get("/tickets/:id", async (req: Request, res: Response) => {
     });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Lab 4 (Issue 2) — Actions Taken.
+//
+// The router-level requireAuth -> passwordChangeGate -> requireStaff gate
+// above means only IT Staff and Administrators can list, create, or update
+// actions. Requesters receive 403 FORBIDDEN with no action payload.
+// PATCH is version-checked for safe conflict handling.
+// ---------------------------------------------------------------------------
+router.get("/tickets/:id/actions", listActions);
+router.post("/tickets/:id/actions", createAction);
+router.patch("/tickets/:id/actions/:actionId", updateAction);
 
 // GET /api/staff/users — assignable owner candidates: active IT Staff and
 // Administrator users (BR-15). Powers the detail-screen owner select so

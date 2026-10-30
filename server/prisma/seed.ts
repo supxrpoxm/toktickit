@@ -199,8 +199,9 @@ async function main() {
     { title: "Request new mouse and mousepad", description: "My mouse double-clicks when I single-click and the mousepad is worn out. I need both replaced.", category: "Hardware", system: "Asset Management" },
   ];
 
-  // Clear existing tickets first (comments, notes, and attachments cascade
-  // via FK, deleted explicitly for idempotent re-seeds)
+  // Clear existing tickets first (actions, comments, notes, and attachments
+  // cascade via FK, deleted explicitly for idempotent re-seeds)
+  await prisma.actionTaken.deleteMany();
   await prisma.publicComment.deleteMany();
   await prisma.internalNote.deleteMany();
   await prisma.attachment.deleteMany();
@@ -258,6 +259,76 @@ async function main() {
     ticketCount++;
   }
 
+  // --- Actions Taken (Lab 4, Issue 2) ---
+  // Deliberately spread across zero, one, and multiple actions so dashboards
+  // and detail screens have realistic coverage. Re-seeding is idempotent
+  // because ActionTaken rows are cleared above with the tickets.
+  const seededTickets = await prisma.ticket.findMany({
+    orderBy: { id: "asc" },
+    select: { id: true, createdAt: true },
+  });
+
+  const actionSamples = [
+    {
+      description: "Checked the VPN client logs and reproduced the connection timeout.",
+      result: "Confirmed an expired gateway certificate; renewal was scheduled with the network team.",
+    },
+    {
+      description: "Contacted the requester to confirm the exact error message and affected device.",
+      result: "Requester provided a screenshot and confirmed the issue affects both office and home networks.",
+    },
+    {
+      description: "Restarted the affected service and verified authentication from a second client.",
+      result: "Authentication succeeded; monitoring for recurrence over the next 24 hours.",
+    },
+    {
+      description: "Reviewed the asset record and prepared a replacement device from available stock.",
+      result: "Replacement device was configured, labelled, and handed to the requester.",
+    },
+    {
+      description: "Updated the account permissions and asked the requester to sign in again.",
+      result: "Requester confirmed access to the requested system and no further errors were reported.",
+    },
+    {
+      description: "Escalated the issue to the platform team with the collected logs.",
+      result: "Platform team identified a configuration drift and applied the corrective change.",
+    },
+  ];
+
+  let actionCount = 0;
+  if (staffIds.length > 0) {
+    for (let i = 0; i < seededTickets.length; i++) {
+      const ticket = seededTickets[i];
+      const actionsForTicket = i % 3 === 0 ? 0 : i % 3 === 1 ? 1 : 2 + (i % 2);
+
+      for (let j = 0; j < actionsForTicket; j++) {
+        const sample = actionSamples[(i + j) % actionSamples.length];
+        const performedById = staffIds[(i + j) % staffIds.length];
+        const followUpRequired = (i + j) % 4 === 0;
+        const actionAt = new Date(
+          Math.min(Date.now(), ticket.createdAt.getTime() + (j + 1) * 6 * 60 * 60 * 1000),
+        );
+
+        await prisma.actionTaken.create({
+          data: {
+            ticketId: ticket.id,
+            actionAt,
+            description: sample.description,
+            result: sample.result,
+            performedById,
+            followUpRequired,
+            followUpNote: followUpRequired
+              ? "Confirm with the requester after the next business-day check."
+              : null,
+            attachmentNotes:
+              (i + j) % 3 === 0 ? "Screenshot/log excerpt attached to the ticket." : null,
+          },
+        });
+        actionCount++;
+      }
+    }
+  }
+
   // --- Example discussion (neutral content, no sensitive data) ---
   // A few tickets get public comments (requester + staff voices) and
   // staff-only internal notes so the threads render on first boot.
@@ -304,7 +375,7 @@ async function main() {
     `Seeded ${categoryNames.length} categories, ${relatedSystemNames.length} related systems, ` +
       `${userSeeds.length} users (${activeRequesters} active + ${inactiveRequesters} inactive Requesters, ` +
       `${activeStaff} active + ${inactiveStaff} inactive IT Staff, ${admins} active Administrator), ` +
-      `and ${ticketCount} tickets.`,
+      `${ticketCount} tickets, and ${actionCount} Actions Taken.`,
   );
   console.log(
     `Local-only credentials: every seeded account uses initial password "${INITIAL_PASSWORD}" ` +
