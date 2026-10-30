@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { roleToLabel } from "../auth.js";
 import { getPrisma } from "../prisma.js";
 import {
+  forbiddenError,
   internalError,
   notFoundError,
   toSafeInt,
@@ -390,6 +391,61 @@ export async function listActions(req: Request, res: Response) {
         take: limit,
       }),
       prisma.actionTaken.count({ where }),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        items: items.map(toActionItem),
+        pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
+      },
+    });
+  } catch {
+    return res.status(500).json(internalError());
+  }
+}
+
+// GET /api/tickets/:id/actions — read-only timeline for the owning Requester.
+// Staff/Admin may also read it, but they use the staff endpoint for write
+// access. Requesters never receive write routes.
+export async function listRequesterActions(req: Request, res: Response) {
+  try {
+    const authUser = req.authUser;
+    if (!authUser) {
+      return res.status(401).json({
+        success: false,
+        error: { code: "UNAUTHENTICATED", message: "Please sign in to continue." },
+      });
+    }
+
+    const ticketId = toSafeInt(req.params.id);
+    if (ticketId === null || ticketId <= 0) return res.status(404).json(notFoundError());
+
+    const prisma = getPrisma();
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+      select: { id: true, requesterId: true },
+    });
+    if (!ticket) return res.status(404).json(notFoundError());
+
+    const isStaff = authUser.role === "IT_STAFF" || authUser.role === "ADMINISTRATOR";
+    if (!isStaff && ticket.requesterId !== authUser.id) {
+      return res.status(403).json(forbiddenError());
+    }
+
+    const page = Math.max(1, toSafeInt(req.query.page) ?? 1);
+    const limit = Math.min(50, Math.max(1, toSafeInt(req.query.limit) ?? 50));
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await Promise.all([
+      prisma.actionTaken.findMany({
+        where: { ticketId },
+        select: actionSelect,
+        orderBy: [{ actionAt: "desc" }, { id: "desc" }],
+        skip,
+        take: limit,
+      }),
+      prisma.actionTaken.count({ where: { ticketId } }),
     ]);
 
     return res.status(200).json({

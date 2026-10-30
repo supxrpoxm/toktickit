@@ -49,11 +49,14 @@ const adminUser = () =>
   makeUser({ id: 11, name: "Admin User", email: "admin@company.com", role: "ADMINISTRATOR" });
 const requesterAlice = () =>
   makeUser({ id: 3, name: "Alice Johnson", email: "alice@company.com", role: "REQUESTER" });
+const requesterBob = () =>
+  makeUser({ id: 4, name: "Bob Smith", email: "bob@company.com", role: "REQUESTER" });
 
 const usersByEmail: Record<string, () => Record<string, unknown>> = {
   "staff1@company.com": staffOne,
   "admin@company.com": adminUser,
   "alice@company.com": requesterAlice,
+  "bob@company.com": requesterBob,
 };
 
 function sessionCookie(setCookie: string | string[] | undefined): string {
@@ -114,7 +117,7 @@ describe("Lab 4 Actions Taken API (Issue 2)", () => {
       const all = Object.values(usersByEmail).map((fn) => fn());
       return all.find((u) => u.id === args?.where?.id) ?? null;
     });
-    prisma.ticket.findUnique.mockResolvedValue({ id: 101 });
+    prisma.ticket.findUnique.mockResolvedValue({ id: 101, requesterId: 3 });
     prisma.actionTaken.findMany.mockResolvedValue([]);
     prisma.actionTaken.count.mockResolvedValue(0);
   });
@@ -411,5 +414,60 @@ describe("Lab 4 Actions Taken API (Issue 2)", () => {
     expect(response.status).toBe(500);
     expect(response.body.error.code).toBe("INTERNAL_ERROR");
     expect(JSON.stringify(response.body)).not.toContain("SQLSTATE");
+  });
+
+  it("lets the owning Requester read the newest-first timeline (AC-06)", async () => {
+    const cookie = await loginAs("alice@company.com");
+    prisma.actionTaken.findMany.mockResolvedValue([makeAction()]);
+    prisma.actionTaken.count.mockResolvedValue(1);
+
+    const response = await request(app)
+      .get("/api/tickets/101/actions")
+      .set("Cookie", cookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.items).toHaveLength(1);
+    expect(response.body.data.items[0]).toMatchObject({
+      id: 501,
+      ticketId: 101,
+      ticketNumber: "TT-0101",
+      description: "Checked the VPN client logs and reproduced the timeout.",
+      performedBy: { id: 7, name: "IT Staff One", role: "IT Staff" },
+    });
+    expect(response.body.data.pagination).toMatchObject({
+      page: 1,
+      limit: 50,
+      total: 1,
+      totalPages: 1,
+    });
+    expect(prisma.actionTaken.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { ticketId: 101 },
+        orderBy: [{ actionAt: "desc" }, { id: "desc" }],
+        skip: 0,
+        take: 50,
+      }),
+    );
+  });
+
+  it("hides another Requester's timeline with 403 and no action data (AC-03)", async () => {
+    const cookie = await loginAs("bob@company.com");
+
+    const response = await request(app)
+      .get("/api/tickets/101/actions")
+      .set("Cookie", cookie);
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe("FORBIDDEN");
+    expect(response.body.data).toBeUndefined();
+    expect(prisma.actionTaken.findMany).not.toHaveBeenCalled();
+  });
+
+  it("requires authentication to read a Requester timeline (AC-03)", async () => {
+    const response = await request(app).get("/api/tickets/101/actions");
+
+    expect(response.status).toBe(401);
+    expect(response.body.error.code).toBe("UNAUTHENTICATED");
+    expect(prisma.actionTaken.findMany).not.toHaveBeenCalled();
   });
 });
