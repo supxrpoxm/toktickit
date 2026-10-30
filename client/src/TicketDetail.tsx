@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import ActionsTaken from "./ActionsTaken";
 
 type TicketStatus = "Open" | "In Progress" | "Resolved" | "Closed" | string;
 
@@ -637,6 +638,19 @@ export default function TicketDetail({ ticketId, requesterId, requesterName = ''
               </div>
             )}
           </section>
+
+          <hr className="my-4" />
+
+          <ActionsTaken
+            ticketId={ticketId}
+            currentUser={{
+              id: requesterId,
+              name: requesterName || ticket.requester?.name || `Requester #${requesterId}`,
+              role: "Requester",
+            }}
+          />
+
+          <hr className="my-4" />
 
           {/* Public discussion with IT staff. Internal Notes are never shown here. */}
           <section

@@ -335,6 +335,78 @@ export async function signalProblemResolved(id: number): Promise<{ id: number; r
   return authRequest(`/api/tickets/${id}/resolved-signal`, { method: "POST" });
 }
 
+// ---------------------------------------------------------------------------
+// Lab 4 (Issue 3) — Actions Taken timeline.
+// Requesters read their own ticket's timeline through /api/tickets/:id/actions;
+// IT Staff / Administrators use the staff endpoint for read + write.
+// ---------------------------------------------------------------------------
+
+export interface ActionTakenItem {
+  id: number;
+  ticketId: number;
+  ticketNumber: string;
+  actionAt: string;
+  description: string;
+  result: string;
+  performedBy: { id: number; name: string; role: string };
+  followUpRequired: boolean;
+  followUpNote: string | null;
+  attachmentNotes: string | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ActionTakenList {
+  items: ActionTakenItem[];
+  pagination: QueuePagination;
+}
+
+export interface ActionTakenInput {
+  actionAt: string;
+  description: string;
+  result: string;
+  followUpRequired: boolean;
+  followUpNote: string | null;
+  attachmentNotes: string | null;
+}
+
+export type ActionTakenUpdateInput = Partial<ActionTakenInput> & { version: number };
+
+export async function fetchActionsTaken(
+  ticketId: number,
+  scope: "staff" | "requester",
+): Promise<ActionTakenList> {
+  const base =
+    scope === "staff"
+      ? `/api/staff/tickets/${ticketId}/actions`
+      : `/api/tickets/${ticketId}/actions`;
+  return authRequest<ActionTakenList>(`${base}?limit=50&sort=newest`);
+}
+
+export async function createActionTaken(
+  ticketId: number,
+  body: ActionTakenInput,
+): Promise<ActionTakenItem> {
+  return authRequest<ActionTakenItem>(`/api/staff/tickets/${ticketId}/actions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function updateActionTaken(
+  ticketId: number,
+  actionId: number,
+  body: ActionTakenUpdateInput,
+): Promise<ActionTakenItem> {
+  return authRequest<ActionTakenItem>(`/api/staff/tickets/${ticketId}/actions/${actionId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 export async function fetchCategories(): Promise<Category[]> {
   let response: Response;
   try {

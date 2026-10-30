@@ -103,7 +103,7 @@ function RequireAdmin({ user, children }: { user: AuthUser; children: React.Reac
   return <>{children}</>;
 }
 
-function StaffTicketDetailRoute({ onBack }: { onBack: () => void }) {
+function StaffTicketDetailRoute({ user, onBack }: { user: AuthUser; onBack: () => void }) {
   const { id } = useParams();
   const ticketId = Number(id);
 
@@ -111,7 +111,13 @@ function StaffTicketDetailRoute({ onBack }: { onBack: () => void }) {
     return <Navigate to="/staff/queue" replace />;
   }
 
-  return <StaffTicketDetail ticketId={ticketId} onBack={onBack} />;
+  return (
+    <StaffTicketDetail
+      ticketId={ticketId}
+      onBack={onBack}
+      currentUser={{ id: user.id, name: user.name, role: user.role }}
+    />
+  );
 }
 
 function TicketDetailRoute({ user, onBack }: TicketDetailRouteProps) {
@@ -398,7 +404,7 @@ function AppShell() {
             path="/staff/tickets/:id"
             element={
               <RequireStaff user={user}>
-                <StaffTicketDetailRoute onBack={() => navigate('/staff/queue')} />
+                <StaffTicketDetailRoute user={user} onBack={() => navigate('/staff/queue')} />
               </RequireStaff>
             }
           />

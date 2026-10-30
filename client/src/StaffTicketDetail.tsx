@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import ActionsTaken from "./ActionsTaken";
 import {
   AuthError,
   fetchStaffComments,
@@ -95,9 +96,14 @@ function fieldMessage(error: AuthError): string {
 type StaffTicketDetailProps = {
   ticketId: number;
   onBack: () => void;
+  currentUser?: { id: number; name: string; role: string };
 };
 
-export default function StaffTicketDetail({ ticketId, onBack }: StaffTicketDetailProps) {
+export default function StaffTicketDetail({
+  ticketId,
+  onBack,
+  currentUser = { id: 0, name: "IT Staff", role: "IT Staff" },
+}: StaffTicketDetailProps) {
   const [ticket, setTicket] = useState<StaffTicket | null>(null);
   const [state, setState] = useState<DetailState>("loading");
   const [retryKey, setRetryKey] = useState(0);
@@ -578,6 +584,10 @@ export default function StaffTicketDetail({ ticketId, onBack }: StaffTicketDetai
               </div>
             </div>
           </section>
+
+          <hr className="my-4" />
+
+          <ActionsTaken ticketId={ticket.id} currentUser={currentUser} />
 
           <hr className="my-4" />
 
