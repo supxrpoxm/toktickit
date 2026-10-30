@@ -129,14 +129,19 @@ function checkCreateInput(body: unknown):
     }
   }
 
-  if (input.followUpNote !== undefined && input.followUpNote !== null && typeof input.followUpNote !== "string") {
-    fields.followUpNote = "Follow-up note must be text.";
+  let followUpNote: string | null = null;
+  if (input.followUpNote !== undefined && input.followUpNote !== null) {
+    if (typeof input.followUpNote !== "string") {
+      fields.followUpNote = "Follow-up note must be text.";
+    } else {
+      followUpNote = input.followUpNote.trim() || null;
+      if (followUpNote && followUpNote.length > MAX_NOTE_LENGTH) {
+        fields.followUpNote = `Follow-up note must be at most ${MAX_NOTE_LENGTH} characters.`;
+      }
+    }
   }
-  const followUpNote = trimmedString(input.followUpNote);
   if (followUpRequired && !followUpNote && !fields.followUpNote) {
     fields.followUpNote = "Follow-up note is required when follow-up is required.";
-  } else if (followUpNote.length > MAX_NOTE_LENGTH) {
-    fields.followUpNote = `Follow-up note must be at most ${MAX_NOTE_LENGTH} characters.`;
   }
 
   if (
@@ -170,7 +175,7 @@ function checkCreateInput(body: unknown):
       description,
       result,
       followUpRequired,
-      followUpNote: followUpRequired ? followUpNote : null,
+      followUpNote,
       attachmentNotes: attachmentNotes || null,
     },
   };
@@ -246,18 +251,18 @@ function checkUpdateInput(
       fields.followUpNote = "Follow-up note must be text.";
     } else {
       followUpNote = trimmedString(input.followUpNote) || null;
+      if (followUpNote && followUpNote.length > MAX_NOTE_LENGTH) {
+        fields.followUpNote = `Follow-up note must be at most ${MAX_NOTE_LENGTH} characters.`;
+      } else if (!fields.followUpNote) {
+        // Explicit null/empty clears the note; a valid string is persisted
+        // even when followUpRequired is false.
+        data.followUpNote = followUpNote;
+      }
     }
   }
-  if (input.followUpRequired !== undefined || input.followUpNote !== undefined) {
-    if (!followUpRequired) {
-      data.followUpNote = null;
-    } else if (!followUpNote) {
-      fields.followUpNote = "Follow-up note is required when follow-up is required.";
-    } else if (followUpNote.length > MAX_NOTE_LENGTH) {
-      fields.followUpNote = `Follow-up note must be at most ${MAX_NOTE_LENGTH} characters.`;
-    } else if (!fields.followUpNote) {
-      data.followUpNote = followUpNote;
-    }
+
+  if (followUpRequired && !followUpNote && !fields.followUpNote) {
+    fields.followUpNote = "Follow-up note is required when follow-up is required.";
   }
 
   if (input.attachmentNotes !== undefined) {

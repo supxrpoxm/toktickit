@@ -159,8 +159,8 @@ model InternalNote {
 // `version` is the optimistic-locking token used by PATCH; it starts at 1 and
 // increments on every successful update so stale edits can be rejected safely.
 // PostgreSQL also enforces followUpNote non-blank when followUpRequired is
-// true via the ActionTaken_followUpNote_required_check constraint (Prisma
-// does not model CHECK constraints, so it lives in the migration SQL).
+// true via the check_followup_note_required constraint (Prisma does not model
+// CHECK constraints, so it lives in the migration SQL).
 model ActionTaken {
   id               Int      @id @default(autoincrement())
   ticketId         Int
