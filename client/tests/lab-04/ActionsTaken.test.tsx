@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ActionsTaken from "../../src/ActionsTaken";
 import type { ActionTakenItem } from "../../src/api";
+import { UserRole, formatRoleDisplay, isStaffRole } from "../../src/roles";
 
 afterEach(() => {
   cleanup();
@@ -12,8 +13,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const STAFF_USER = { id: 7, name: "IT Staff One", role: "IT Staff" };
-const REQUESTER_USER = { id: 3, name: "Alice Johnson", role: "Requester" };
+const STAFF_USER = { id: 7, name: "IT Staff One", role: UserRole.IT_STAFF };
+const REQUESTER_USER = { id: 3, name: "Alice Johnson", role: UserRole.REQUESTER };
 
 const FOLLOW_UP_ACTION: ActionTakenItem = {
   id: 501,
@@ -22,7 +23,7 @@ const FOLLOW_UP_ACTION: ActionTakenItem = {
   actionAt: "2026-10-29T09:00:00.000Z",
   description: "Checked the VPN client logs and reproduced the timeout.",
   result: "Confirmed an expired gateway certificate.",
-  performedBy: { id: 7, name: "IT Staff One", role: "IT Staff" },
+  performedBy: { id: 7, name: "IT Staff One", role: UserRole.IT_STAFF },
   followUpRequired: true,
   followUpNote: "Confirm with the requester after the certificate renewal.",
   attachmentNotes: "Log excerpt attached to the ticket.",
@@ -38,7 +39,7 @@ const PLAIN_ACTION: ActionTakenItem = {
   actionAt: "2026-10-28T14:30:00.000Z",
   description: "Restarted the affected service.",
   result: "Authentication succeeded from a second client.",
-  performedBy: { id: 11, name: "Admin User", role: "Administrator" },
+  performedBy: { id: 11, name: "Admin User", role: UserRole.ADMINISTRATOR },
   followUpRequired: false,
   followUpNote: "Optional note retained.",
   attachmentNotes: null,
@@ -65,11 +66,16 @@ function listResponse(items: ActionTakenItem[]) {
   });
 }
 
+type MockResult = { status: number; body: unknown };
+
 function mockActionsApi(options: {
   initial?: ActionTakenItem[];
   afterSave?: ActionTakenItem[];
   created?: ActionTakenItem;
   postDeferred?: boolean;
+  postResult?: MockResult;
+  patchResult?: MockResult;
+  refreshFailures?: number;
 } = {}) {
   let getCount = 0;
   const fetchMock = vi.fn(
@@ -79,10 +85,25 @@ function mockActionsApi(options: {
 
       if (method === "GET" && url.includes("/actions")) {
         getCount += 1;
-        return listResponse(getCount === 1 ? options.initial ?? [] : options.afterSave ?? options.initial ?? []);
+        if (getCount === 1) return listResponse(options.initial ?? []);
+
+        const refreshNumber = getCount - 1;
+        if (options.refreshFailures && refreshNumber <= options.refreshFailures) {
+          return jsonResponse(
+            {
+              success: false,
+              error: { code: "INTERNAL_ERROR", message: "The timeline could not refresh." },
+            },
+            500,
+          );
+        }
+        return listResponse(options.afterSave ?? options.initial ?? []);
       }
 
       if (method === "POST" && url === "/api/staff/tickets/101/actions") {
+        if (options.postResult) {
+          return jsonResponse(options.postResult.body, options.postResult.status);
+        }
         const created = options.created ?? FOLLOW_UP_ACTION;
         if (options.postDeferred) {
           return new Promise((resolve) => {
@@ -90,6 +111,12 @@ function mockActionsApi(options: {
           });
         }
         return jsonResponse({ success: true, data: created }, 201);
+      }
+
+      if (method === "PATCH" && url === "/api/staff/tickets/101/actions/501") {
+        if (options.patchResult) {
+          return jsonResponse(options.patchResult.body, options.patchResult.status);
+        }
       }
 
       return jsonResponse(
@@ -246,5 +273,183 @@ describe("ActionsTaken (lab-04, Issue 3)", () => {
       ).toHaveLength(1);
     });
     expect(await screen.findByText("Action Taken added.")).toBeInTheDocument();
+  });
+
+  it("uses centralized role constants for permission checks and display labels", async () => {
+    expect(formatRoleDisplay(UserRole.IT_STAFF)).toBe("IT Staff");
+    expect(formatRoleDisplay("it_staff")).toBe("IT Staff");
+    expect(formatRoleDisplay(UserRole.ADMINISTRATOR)).toBe("Administrator");
+    expect(isStaffRole(UserRole.IT_STAFF)).toBe(true);
+    expect(isStaffRole(UserRole.ADMINISTRATOR)).toBe(true);
+    expect(isStaffRole(UserRole.REQUESTER)).toBe(false);
+
+    mockActionsApi({ initial: [FOLLOW_UP_ACTION] });
+    render(<ActionsTaken ticketId={101} currentUser={STAFF_USER} />);
+
+    expect(await screen.findByRole("button", { name: "Add Action Taken" })).toBeInTheDocument();
+    expect(screen.getByText("IT Staff")).toBeInTheDocument();
+  });
+
+  it("keeps the draft and offers reload when the server reports a stale update", async () => {
+    const latest: ActionTakenItem = {
+      ...FOLLOW_UP_ACTION,
+      version: 2,
+      description: "Server latest description.",
+      result: "Server latest result.",
+      updatedAt: "2026-10-30T10:00:00.000Z",
+    };
+    const { fetchMock } = mockActionsApi({
+      initial: [FOLLOW_UP_ACTION],
+      patchResult: {
+        status: 409,
+        body: {
+          success: false,
+          error: {
+            code: "STALE_UPDATE",
+            message: "This action was updated by someone else.",
+            conflict: { expectedVersion: 1, currentVersion: 2, current: latest },
+          },
+        },
+      },
+    });
+
+    render(<ActionsTaken ticketId={101} currentUser={STAFF_USER} />);
+    await screen.findByText(FOLLOW_UP_ACTION.description);
+    await userEvent.click(screen.getByRole("button", { name: /Edit Action Taken/ }));
+
+    const description = screen.getByLabelText(/Action Description/);
+    await userEvent.clear(description);
+    await userEvent.type(description, "My unsaved draft.");
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(
+      await screen.findByText("This action was updated by another user."),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/Action Description/)).toHaveValue("My unsaved draft.");
+    expect(screen.getAllByText(/Server latest description/).length).toBeGreaterThan(0);
+
+    const patchCall = fetchMock.mock.calls.find(
+      ([, init]) => (init?.method ?? "GET").toUpperCase() === "PATCH",
+    );
+    expect(patchCall).toBeTruthy();
+    expect(JSON.parse(String(patchCall?.[1]?.body))).toMatchObject({
+      version: 1,
+      description: "My unsaved draft.",
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Reload latest" }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Action Description/)).toHaveValue(
+        "Server latest description.",
+      );
+    });
+    expect(
+      screen.queryByText("This action was updated by another user."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("parses field-level validation errors and preserves the draft", async () => {
+    const { fetchMock } = mockActionsApi({
+      initial: [],
+      postResult: {
+        status: 400,
+        body: {
+          success: false,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Action details are invalid.",
+            fields: { description: "Description must be more specific." },
+          },
+        },
+      },
+    });
+
+    render(<ActionsTaken ticketId={101} currentUser={STAFF_USER} />);
+    await screen.findByText("No Actions Taken yet.");
+    await userEvent.click(screen.getByRole("button", { name: "Add Action Taken" }));
+    await userEvent.type(screen.getByLabelText(/Action Description/), "Short");
+    await userEvent.type(screen.getByLabelText(/^Result/), "Done");
+    await userEvent.click(screen.getByRole("button", { name: "Save Action" }));
+
+    expect(await screen.findByText("Description must be more specific.")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Action Description/)).toHaveValue("Short");
+    expect(screen.getByLabelText(/^Result/)).toHaveValue("Done");
+    expect(
+      fetchMock.mock.calls.filter(
+        ([, init]) => (init?.method ?? "GET").toUpperCase() === "POST",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("falls back safely when an API error body is not the standard envelope", async () => {
+    mockActionsApi({
+      initial: [],
+      postResult: { status: 500, body: { message: "Unexpected server response." } },
+    });
+
+    render(<ActionsTaken ticketId={101} currentUser={STAFF_USER} />);
+    await screen.findByText("No Actions Taken yet.");
+    await userEvent.click(screen.getByRole("button", { name: "Add Action Taken" }));
+    await userEvent.type(screen.getByLabelText(/Action Description/), "Draft survives.");
+    await userEvent.type(screen.getByLabelText(/^Result/), "Still here.");
+    await userEvent.click(screen.getByRole("button", { name: "Save Action" }));
+
+    expect(await screen.findByText("Unexpected server response.")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Action Description/)).toHaveValue("Draft survives.");
+  });
+
+  it("keeps the saved action visible and warns when the post-save refresh fails", async () => {
+    const created: ActionTakenItem = {
+      ...PLAIN_ACTION,
+      id: 999,
+      description: "Saved before refresh failed.",
+      result: "The mutation succeeded.",
+    };
+    const { getCount } = mockActionsApi({
+      initial: [],
+      afterSave: [created],
+      created,
+      refreshFailures: 1,
+    });
+
+    render(<ActionsTaken ticketId={101} currentUser={STAFF_USER} />);
+    await screen.findByText("No Actions Taken yet.");
+    await userEvent.click(screen.getByRole("button", { name: "Add Action Taken" }));
+    await userEvent.type(screen.getByLabelText(/Action Description/), created.description);
+    await userEvent.type(screen.getByLabelText(/^Result/), created.result);
+    await userEvent.click(screen.getByRole("button", { name: "Save Action" }));
+
+    expect(await screen.findByText("Action Taken added.")).toBeInTheDocument();
+    expect(await screen.findByText("The timeline could not refresh.")).toBeInTheDocument();
+    expect(screen.getByText(created.description)).toBeInTheDocument();
+    expect(getCount()).toBe(2);
+
+    await userEvent.click(screen.getByRole("button", { name: "Retry refresh" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("The timeline could not refresh.")).not.toBeInTheDocument();
+    });
+    expect(screen.getByText(created.description)).toBeInTheDocument();
+  });
+
+  it("confirms before discarding an unsaved draft", async () => {
+    mockActionsApi({ initial: [] });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+
+    render(<ActionsTaken ticketId={101} currentUser={STAFF_USER} />);
+    await screen.findByText("No Actions Taken yet.");
+    await userEvent.click(screen.getByRole("button", { name: "Add Action Taken" }));
+    await userEvent.type(screen.getByLabelText(/Action Description/), "Unsaved draft.");
+
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(confirm).toHaveBeenCalled();
+    expect(screen.getByLabelText(/Action Description/)).toHaveValue("Unsaved draft.");
+
+    confirm.mockReturnValue(true);
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => {
+      expect(screen.queryByLabelText(/Action Description/)).not.toBeInTheDocument();
+    });
   });
 });

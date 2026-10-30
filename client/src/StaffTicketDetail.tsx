@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import ActionsTaken from "./ActionsTaken";
+import { UserRole, formatRoleDisplay, normalizeUserRole } from "./roles";
 import {
   AuthError,
   fetchStaffComments,
@@ -68,8 +69,9 @@ const priorityBadgeClass: Record<string, string> = {
 };
 
 function roleBadgeStyle(role: string): React.CSSProperties {
-  if (role === "Administrator") return { backgroundColor: "#006B3C", color: "#fff" };
-  if (role === "IT Staff") return { backgroundColor: "#0B7A46", color: "#fff" };
+  const normalized = normalizeUserRole(role);
+  if (normalized === UserRole.ADMINISTRATOR) return { backgroundColor: "#006B3C", color: "#fff" };
+  if (normalized === UserRole.IT_STAFF) return { backgroundColor: "#0B7A46", color: "#fff" };
   return { backgroundColor: "#EAF6EF", color: "#006B3C", border: "1px solid #006B3C" };
 }
 
@@ -102,7 +104,7 @@ type StaffTicketDetailProps = {
 export default function StaffTicketDetail({
   ticketId,
   onBack,
-  currentUser = { id: 0, name: "IT Staff", role: "IT Staff" },
+  currentUser = { id: 0, name: "IT Staff", role: UserRole.IT_STAFF },
 }: StaffTicketDetailProps) {
   const [ticket, setTicket] = useState<StaffTicket | null>(null);
   const [state, setState] = useState<DetailState>("loading");
@@ -513,7 +515,7 @@ export default function StaffTicketDetail({
                     <option value="">Unassigned</option>
                     {staffUsers.map((user) => (
                       <option key={user.id} value={user.id}>
-                        {user.name} ({user.role})
+                        {user.name} ({formatRoleDisplay(user.role)})
                       </option>
                     ))}
                   </select>
@@ -620,7 +622,7 @@ export default function StaffTicketDetail({
                       <p className="small mb-1">
                         <span className="fw-semibold">{entry.author.name}</span>{" "}
                         <span className="badge rounded-pill ms-1" style={roleBadgeStyle(entry.author.role)}>
-                          {entry.author.role}
+                          {formatRoleDisplay(entry.author.role)}
                         </span>{" "}
                         <span className="text-muted">· {formatDateTime(entry.createdAt)}</span>
                       </p>
@@ -690,7 +692,7 @@ export default function StaffTicketDetail({
                       <p className="small mb-1">
                         <span className="fw-semibold">{entry.author.name}</span>{" "}
                         <span className="badge rounded-pill ms-1" style={roleBadgeStyle(entry.author.role)}>
-                          {entry.author.role}
+                          {formatRoleDisplay(entry.author.role)}
                         </span>{" "}
                         <span className="text-muted">· {formatDateTime(entry.createdAt)}</span>
                       </p>

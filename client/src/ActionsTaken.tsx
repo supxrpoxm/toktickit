@@ -6,6 +6,7 @@ import {
   updateActionTaken,
   type ActionTakenItem,
 } from "./api";
+import { UserRole, formatRoleDisplay, isStaffRole, normalizeUserRole } from "./roles";
 
 // ---------------------------------------------------------------------------
 // Lab 4 (Issue 3) — Actions Taken UI.
@@ -28,8 +29,75 @@ const MAX_DESCRIPTION = 5000;
 const MAX_RESULT = 5000;
 const MAX_NOTE = 2000;
 
-function isStaffRole(role: string): boolean {
-  return role === "IT Staff" || role === "Administrator";
+type StaleConflict = {
+  expectedVersion?: number;
+  currentVersion?: number;
+  current?: ActionTakenItem;
+};
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function asActionTakenItem(value: unknown): ActionTakenItem | null {
+  const record = asRecord(value);
+  const performedBy = asRecord(record?.performedBy);
+  if (
+    !record ||
+    typeof record.id !== "number" ||
+    typeof record.version !== "number" ||
+    typeof record.actionAt !== "string" ||
+    typeof record.description !== "string" ||
+    typeof record.result !== "string" ||
+    !performedBy ||
+    typeof performedBy.id !== "number" ||
+    typeof performedBy.name !== "string" ||
+    typeof performedBy.role !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    id: record.id,
+    ticketId: typeof record.ticketId === "number" ? record.ticketId : 0,
+    ticketNumber: typeof record.ticketNumber === "string" ? record.ticketNumber : "",
+    actionAt: record.actionAt,
+    description: record.description,
+    result: record.result,
+    performedBy: { id: performedBy.id, name: performedBy.name, role: performedBy.role },
+    followUpRequired: record.followUpRequired === true,
+    followUpNote: typeof record.followUpNote === "string" ? record.followUpNote : null,
+    attachmentNotes: typeof record.attachmentNotes === "string" ? record.attachmentNotes : null,
+    version: record.version,
+    createdAt: typeof record.createdAt === "string" ? record.createdAt : "",
+    updatedAt: typeof record.updatedAt === "string" ? record.updatedAt : "",
+  };
+}
+
+function staleConflictFrom(error: AuthError): StaleConflict {
+  const conflict = asRecord(error.conflict);
+  return {
+    expectedVersion:
+      typeof conflict?.expectedVersion === "number" ? conflict.expectedVersion : undefined,
+    currentVersion:
+      typeof conflict?.currentVersion === "number" ? conflict.currentVersion : undefined,
+    current: asActionTakenItem(conflict?.current) ?? undefined,
+  };
+}
+
+function actionTimestamp(action: ActionTakenItem): number {
+  const value = new Date(action.actionAt).getTime();
+  return Number.isNaN(value) ? 0 : value;
+}
+
+function sortActions(items: ActionTakenItem[]): ActionTakenItem[] {
+  return [...items].sort((a, b) => actionTimestamp(b) - actionTimestamp(a) || b.id - a.id);
+}
+
+function mergeAction(items: ActionTakenItem[], saved: ActionTakenItem): ActionTakenItem[] {
+  return sortActions([saved, ...items.filter((item) => item.id !== saved.id)]);
 }
 
 function formatDateTime(value: string): string {
@@ -44,8 +112,9 @@ function toDateTimeLocalValue(date: Date): string {
 }
 
 function performerBadgeClass(role: string): string {
-  if (role === "Administrator") return "bg-success text-white";
-  if (role === "IT Staff") return "bg-success-subtle text-success-emphasis border";
+  const normalized = normalizeUserRole(role);
+  if (normalized === UserRole.ADMINISTRATOR) return "bg-success text-white";
+  if (normalized === UserRole.IT_STAFF) return "bg-success-subtle text-success-emphasis border";
   return "bg-secondary-subtle text-secondary-emphasis border";
 }
 
@@ -56,12 +125,14 @@ function messageFor(error: unknown, fallback: string): string {
 
 export default function ActionsTaken({ ticketId, currentUser }: ActionsTakenProps) {
   const canManage = isStaffRole(currentUser.role);
+  const currentRoleDisplay = formatRoleDisplay(currentUser.role);
 
   const [actions, setActions] = useState<ActionTakenItem[]>([]);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [loadError, setLoadError] = useState("");
   const [retryKey, setRetryKey] = useState(0);
   const [successMessage, setSuccessMessage] = useState("");
+  const [refreshWarning, setRefreshWarning] = useState("");
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingAction, setEditingAction] = useState<ActionTakenItem | null>(null);
@@ -69,6 +140,9 @@ export default function ActionsTaken({ ticketId, currentUser }: ActionsTakenProp
   const submittingRef = useRef(false);
   const [formError, setFormError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [draftDirty, setDraftDirty] = useState(false);
+  const [staleConflict, setStaleConflict] = useState<StaleConflict | null>(null);
+  const [reloadingLatest, setReloadingLatest] = useState(false);
 
   const [actionAt, setActionAt] = useState(() => toDateTimeLocalValue(new Date()));
   const [description, setDescription] = useState("");
@@ -85,8 +159,9 @@ export default function ActionsTaken({ ticketId, currentUser }: ActionsTakenProp
     fetchActionsTaken(ticketId, canManage ? "staff" : "requester").then(
       (data) => {
         if (cancelled) return;
-        setActions(data.items ?? []);
+        setActions(sortActions(data.items ?? []));
         setLoadState("ready");
+        setRefreshWarning("");
       },
       (error) => {
         if (cancelled) return;
@@ -110,17 +185,11 @@ export default function ActionsTaken({ ticketId, currentUser }: ActionsTakenProp
     setAttachmentNotes("");
     setFormError("");
     setFieldErrors({});
+    setDraftDirty(false);
+    setStaleConflict(null);
   }
 
-  function openCreate() {
-    if (!canManage) return;
-    resetForm();
-    setSuccessMessage("");
-    setFormOpen(true);
-  }
-
-  function openEdit(action: ActionTakenItem) {
-    if (!canManage) return;
+  function populateForm(action: ActionTakenItem) {
     setEditingAction(action);
     setActionAt(toDateTimeLocalValue(new Date(action.actionAt)));
     setDescription(action.description);
@@ -130,12 +199,33 @@ export default function ActionsTaken({ ticketId, currentUser }: ActionsTakenProp
     setAttachmentNotes(action.attachmentNotes ?? "");
     setFormError("");
     setFieldErrors({});
+    setDraftDirty(false);
+  }
+
+  function confirmDiscardDraft(): boolean {
+    if (!draftDirty) return true;
+    if (typeof window === "undefined" || typeof window.confirm !== "function") return true;
+    return window.confirm("Discard your unsaved changes to this Action Taken?");
+  }
+
+  function openCreate() {
+    if (!canManage) return;
+    if (!confirmDiscardDraft()) return;
+    resetForm();
+    setSuccessMessage("");
+    setFormOpen(true);
+  }
+
+  function openEdit(action: ActionTakenItem) {
+    if (!canManage) return;
+    if (!confirmDiscardDraft()) return;
+    populateForm(action);
     setSuccessMessage("");
     setFormOpen(true);
   }
 
   function closeForm() {
-    if (submittingRef.current) return;
+    if (submittingRef.current || !confirmDiscardDraft()) return;
     setFormOpen(false);
     resetForm();
   }
@@ -185,6 +275,7 @@ export default function ActionsTaken({ ticketId, currentUser }: ActionsTakenProp
 
   function handleFollowUpToggle(event: ChangeEvent<HTMLInputElement>) {
     const checked = event.target.checked;
+    setDraftDirty(true);
     setFollowUpRequired(checked);
     if (!checked) {
       clearFieldError("followUpNote");
@@ -193,9 +284,46 @@ export default function ActionsTaken({ ticketId, currentUser }: ActionsTakenProp
     }
   }
 
-  async function refreshActions() {
-    const data = await fetchActionsTaken(ticketId, canManage ? "staff" : "requester");
-    setActions(data.items ?? []);
+  async function refreshActions(): Promise<ActionTakenItem[] | null> {
+    try {
+      const data = await fetchActionsTaken(ticketId, canManage ? "staff" : "requester");
+      const next = sortActions(data.items ?? []);
+      setActions(next);
+      setRefreshWarning("");
+      return next;
+    } catch (error) {
+      setRefreshWarning(
+        messageFor(
+          error,
+          "The action was saved, but the timeline could not refresh. Your saved action is still shown.",
+        ),
+      );
+      return null;
+    }
+  }
+
+  async function reloadLatestVersion() {
+    if (!editingAction || reloadingLatest) return;
+    setReloadingLatest(true);
+
+    let latest = staleConflict?.current;
+    if (!latest) {
+      const items = await refreshActions();
+      latest = items?.find((item) => item.id === editingAction.id);
+    }
+
+    if (!latest) {
+      setFormError(
+        "We couldn't load the latest version of this action. Your draft is still here; try again.",
+      );
+      setReloadingLatest(false);
+      return;
+    }
+
+    setActions((current) => mergeAction(current, latest!));
+    populateForm(latest);
+    setStaleConflict(null);
+    setReloadingLatest(false);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -220,6 +348,8 @@ export default function ActionsTaken({ ticketId, currentUser }: ActionsTakenProp
     };
 
     try {
+      // The version is the optimistic-concurrency token. It is the version
+      // last read from the server and must accompany every update.
       const saved = editingAction
         ? await updateActionTaken(ticketId, editingAction.id, {
             version: editingAction.version,
@@ -227,22 +357,26 @@ export default function ActionsTaken({ ticketId, currentUser }: ActionsTakenProp
           })
         : await createActionTaken(ticketId, payload);
 
-      setActions((current) =>
-        editingAction
-          ? current.map((item) => (item.id === saved.id ? saved : item))
-          : [saved, ...current],
-      );
+      setActions((current) => mergeAction(current, saved));
       setSuccessMessage(editingAction ? "Action Taken updated." : "Action Taken added.");
       setFormOpen(false);
       resetForm();
 
-      try {
-        await refreshActions();
-      } catch {
-        setLoadState("failed");
-        setLoadError("The action was saved, but the timeline could not refresh. Use Retry to reload.");
-      }
+      // The mutation response is authoritative for this action. The follow-up
+      // refresh replaces the local timeline with the server's ordering; if it
+      // fails we keep the saved action visible and show a retryable warning.
+      await refreshActions();
     } catch (error) {
+      if (error instanceof AuthError && error.status === 409 && error.code === "STALE_UPDATE") {
+        const conflict = staleConflictFrom(error);
+        setStaleConflict(conflict);
+        setFormError("");
+        if (conflict.current) {
+          setActions((current) => mergeAction(current, conflict.current!));
+        }
+        return;
+      }
+
       setFormError(
         messageFor(error, "Unable to save this Action Taken right now. Please try again."),
       );
@@ -284,6 +418,22 @@ export default function ActionsTaken({ ticketId, currentUser }: ActionsTakenProp
         </div>
       )}
 
+      {refreshWarning && (
+        <div
+          className="alert alert-warning shadow-sm d-flex flex-column flex-sm-row align-items-sm-center gap-2"
+          role="status"
+        >
+          <span className="text-break">{refreshWarning}</span>
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-success ms-sm-auto flex-shrink-0"
+            onClick={() => void refreshActions()}
+          >
+            Retry refresh
+          </button>
+        </div>
+      )}
+
       {formOpen && canManage && (
         <form
           className="card border-0 shadow-sm mb-4"
@@ -294,6 +444,50 @@ export default function ActionsTaken({ ticketId, currentUser }: ActionsTakenProp
         >
           <div className="card-body p-3 p-md-4">
             <h3 className="h5 mb-3">{editingAction ? "Edit Action Taken" : "Add Action Taken"}</h3>
+
+            {staleConflict && (
+              <div className="alert alert-warning" role="alert" aria-live="assertive">
+                <p className="fw-semibold mb-1">This action was updated by another user.</p>
+                <p className="small mb-2">
+                  Your draft has been kept. Review the latest version before saving so you do not
+                  overwrite someone else&apos;s work.
+                </p>
+                {staleConflict.current && (
+                  <div className="small border rounded-3 bg-white p-2 mb-2">
+                    <p className="mb-1">
+                      <span className="fw-semibold">Current action:</span>{" "}
+                      {staleConflict.current.description}
+                    </p>
+                    <p className="mb-1">
+                      <span className="fw-semibold">Current result:</span>{" "}
+                      {staleConflict.current.result}
+                    </p>
+                    <p className="mb-0 text-muted">
+                      Version {staleConflict.currentVersion ?? staleConflict.current.version} ·
+                      Updated {formatDateTime(staleConflict.current.updatedAt)}
+                    </p>
+                  </div>
+                )}
+                <div className="d-flex flex-column flex-sm-row gap-2">
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-zen-primary"
+                    onClick={() => void reloadLatestVersion()}
+                    disabled={reloadingLatest || submitting}
+                  >
+                    {reloadingLatest ? "Reloading..." : "Reload latest"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-secondary"
+                    onClick={() => setStaleConflict(null)}
+                    disabled={reloadingLatest || submitting}
+                  >
+                    Keep my draft
+                  </button>
+                </div>
+              </div>
+            )}
 
             {formError && (
               <div className="alert alert-danger" role="alert">
@@ -313,6 +507,7 @@ export default function ActionsTaken({ ticketId, currentUser }: ActionsTakenProp
                   className={`form-control ${fieldErrors.actionAt ? "is-invalid" : ""}`}
                   value={actionAt}
                   onChange={(event) => {
+                    setDraftDirty(true);
                     setActionAt(event.target.value);
                     clearFieldError("actionAt");
                   }}
@@ -336,7 +531,7 @@ export default function ActionsTaken({ ticketId, currentUser }: ActionsTakenProp
                   id="action-performed-by"
                   type="text"
                   className="form-control"
-                  value={`${currentUser.name} · ${currentUser.role}`}
+                  value={`${currentUser.name} · ${currentRoleDisplay}`}
                   readOnly
                   disabled
                   aria-readonly="true"
@@ -356,6 +551,7 @@ export default function ActionsTaken({ ticketId, currentUser }: ActionsTakenProp
                   maxLength={MAX_DESCRIPTION}
                   value={description}
                   onChange={(event) => {
+                    setDraftDirty(true);
                     setDescription(event.target.value);
                     clearFieldError("description");
                   }}
@@ -384,6 +580,7 @@ export default function ActionsTaken({ ticketId, currentUser }: ActionsTakenProp
                   maxLength={MAX_RESULT}
                   value={result}
                   onChange={(event) => {
+                    setDraftDirty(true);
                     setResult(event.target.value);
                     clearFieldError("result");
                   }}
@@ -433,6 +630,7 @@ export default function ActionsTaken({ ticketId, currentUser }: ActionsTakenProp
                   maxLength={MAX_NOTE}
                   value={followUpNote}
                   onChange={(event) => {
+                    setDraftDirty(true);
                     setFollowUpNote(event.target.value);
                     if (event.target.value.trim()) clearFieldError("followUpNote");
                   }}
@@ -472,6 +670,7 @@ export default function ActionsTaken({ ticketId, currentUser }: ActionsTakenProp
                   maxLength={MAX_NOTE}
                   value={attachmentNotes}
                   onChange={(event) => {
+                    setDraftDirty(true);
                     setAttachmentNotes(event.target.value);
                     clearFieldError("attachmentNotes");
                   }}
@@ -560,7 +759,7 @@ export default function ActionsTaken({ ticketId, currentUser }: ActionsTakenProp
                     <p className="mb-0 small d-flex flex-wrap align-items-center gap-2">
                       <span className="fw-semibold">{action.performedBy.name}</span>
                       <span className={`badge rounded-pill ${performerBadgeClass(action.performedBy.role)}`}>
-                        {action.performedBy.role}
+                        {formatRoleDisplay(action.performedBy.role)}
                       </span>
                       <span className="text-muted">User #{action.performedBy.id}</span>
                     </p>

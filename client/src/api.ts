@@ -1,3 +1,15 @@
+import { UserRole } from "./roles";
+
+export {
+  USER_ROLE_DISPLAY,
+  USER_ROLE_VALUES,
+  UserRole,
+  formatRoleDisplay,
+  isAdministratorRole,
+  isStaffRole,
+  normalizeUserRole,
+} from "./roles";
+
 // Use an explicit backend URL to avoid connection issues from the dev client
 const API_URL = "http://localhost:3000";
 
@@ -58,8 +70,6 @@ export async function fetchActiveRequesters(): Promise<Requester[]> {
 // Vite /api proxy). No password, hash, or token is ever kept in JS storage.
 // ---------------------------------------------------------------------------
 
-export type UserRole = "Requester" | "IT Staff" | "Administrator";
-
 export interface AuthUser {
   id: number;
   name: string;
@@ -74,19 +84,78 @@ export class AuthError extends Error {
   code: string;
   status: number;
   fields?: Record<string, string>;
+  conflict?: unknown;
 
-  constructor(status: number, code: string, message: string, fields?: Record<string, string>) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    fields?: Record<string, string>,
+    conflict?: unknown,
+  ) {
     super(message);
     this.name = "AuthError";
     this.status = status;
     this.code = code;
     this.fields = fields;
+    this.conflict = conflict;
   }
 }
 
-type AuthEnvelope<T> =
-  | { success: true; data: T }
-  | { success: false; error: { code: string; message: string; fields?: Record<string, string> } };
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function parseFieldErrors(value: unknown): Record<string, string> | undefined {
+  const record = asRecord(value);
+  if (!record) return undefined;
+
+  const fields: Record<string, string> = {};
+  for (const [key, message] of Object.entries(record)) {
+    if (typeof message === "string" && message.trim()) fields[key] = message;
+  }
+  return Object.keys(fields).length > 0 ? fields : undefined;
+}
+
+type ParsedApiError = {
+  code: string;
+  message: string;
+  fields?: Record<string, string>;
+  conflict?: unknown;
+};
+
+// Parse the standard backend envelope safely. The fallbacks also tolerate
+// legacy/unexpected shapes such as `{ message }` or `{ fieldErrors }` without
+// throwing, so the UI can always show a safe message.
+function parseApiError(body: unknown, status: number): ParsedApiError {
+  const root = asRecord(body);
+  const nested = asRecord(root?.error);
+
+  const code =
+    (typeof nested?.code === "string" && nested.code) ||
+    (typeof root?.code === "string" && root.code) ||
+    (status === 401 ? "UNAUTHENTICATED" : "INTERNAL_ERROR");
+
+  const message =
+    (typeof nested?.message === "string" && nested.message) ||
+    (typeof root?.message === "string" && root.message) ||
+    "Something went wrong. Please try again.";
+
+  const fields =
+    parseFieldErrors(nested?.fields) ??
+    parseFieldErrors(nested?.fieldErrors) ??
+    parseFieldErrors(root?.fieldErrors) ??
+    parseFieldErrors(root?.fields);
+
+  return {
+    code,
+    message,
+    fields,
+    conflict: nested?.conflict ?? root?.conflict,
+  };
+}
 
 async function authRequest<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
@@ -96,26 +165,20 @@ async function authRequest<T>(path: string, init?: RequestInit): Promise<T> {
     throw new AuthError(0, "NETWORK_ERROR", "Unable to reach the server. Please try again.");
   }
 
-  let body: AuthEnvelope<T>;
+  let body: unknown;
   try {
-    body = (await response.json()) as AuthEnvelope<T>;
+    body = await response.json();
   } catch {
     throw new AuthError(response.status, "NETWORK_ERROR", "Unable to reach the server. Please try again.");
   }
 
-  if (!response.ok || !body.success) {
-    const fallback: { code: string; message: string; fields?: Record<string, string> } = {
-      code: response.status === 401 ? "UNAUTHENTICATED" : "INTERNAL_ERROR",
-      message: "Something went wrong. Please try again.",
-    };
-    const error =
-      !body.success && typeof body.error === "object" && body.error !== null
-        ? (body.error as { code: string; message: string; fields?: Record<string, string> })
-        : fallback;
-    throw new AuthError(response.status, error.code, error.message, error.fields);
+  const envelope = asRecord(body);
+  if (!response.ok || !envelope || envelope.success !== true) {
+    const error = parseApiError(body, response.status);
+    throw new AuthError(response.status, error.code, error.message, error.fields, error.conflict);
   }
 
-  return (body as { success: true; data: T }).data;
+  return envelope.data as T;
 }
 
 export async function login(email: string, password: string): Promise<AuthUser> {

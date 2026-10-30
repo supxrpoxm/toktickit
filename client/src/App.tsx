@@ -9,6 +9,13 @@ import UserManagement from './UserManagement';
 import Login from './Login';
 import ChangePassword from './ChangePassword';
 import { fetchMe, logout, type AuthUser } from './api';
+import {
+  UserRole,
+  formatRoleDisplay,
+  isAdministratorRole,
+  isStaffRole,
+  normalizeUserRole,
+} from './roles';
 
 // Legacy Lab 2 storage key. The Development Requester selector is removed;
 // any stale value is ignored and cleared on boot.
@@ -23,15 +30,16 @@ function clearLegacyRequesterState() {
 }
 
 function roleBadgeStyle(role: string): React.CSSProperties {
-  if (role === 'Administrator') return { backgroundColor: '#006B3C', color: '#fff' };
-  if (role === 'IT Staff') return { backgroundColor: '#0B7A46', color: '#fff' };
+  const normalized = normalizeUserRole(role);
+  if (normalized === UserRole.ADMINISTRATOR) return { backgroundColor: '#006B3C', color: '#fff' };
+  if (normalized === UserRole.IT_STAFF) return { backgroundColor: '#0B7A46', color: '#fff' };
   return { backgroundColor: '#EAF6EF', color: '#006B3C', border: '1px solid #006B3C' };
 }
 
 export function RoleBadge({ role }: { role: string }) {
   return (
     <span className="badge rounded-pill" style={roleBadgeStyle(role)}>
-      {role}
+      {formatRoleDisplay(role)}
     </span>
   );
 }
@@ -47,20 +55,12 @@ type TicketDetailRouteProps = {
   onBack: () => void;
 };
 
-function isStaffRole(role: string): boolean {
-  return role === 'IT Staff' || role === 'Administrator';
-}
-
-function isAdminRole(role: string): boolean {
-  return role === 'Administrator';
-}
-
 // Role homes (Lab 3, Issue 5): Requesters land on My Tickets, IT Staff on
 // the shared ticket queue, Administrators on User Management. Administrators
 // keep deep-link access to the staff queue (RequireStaff still permits the
 // role, preserving Issue 3 behavior).
 function roleHome(user: AuthUser): string {
-  if (isAdminRole(user.role)) return '/admin/users';
+  if (isAdministratorRole(user.role)) return '/admin/users';
   return isStaffRole(user.role) ? '/staff/queue' : '/';
 }
 
@@ -91,7 +91,7 @@ function RequireStaff({ user, children }: { user: AuthUser; children: React.Reac
 }
 
 function RequireAdmin({ user, children }: { user: AuthUser; children: React.ReactNode }) {
-  if (!isAdminRole(user.role)) {
+  if (!isAdministratorRole(user.role)) {
     return (
       <ForbiddenPanel
         message="This area is available to Administrators."
@@ -266,7 +266,7 @@ function AppShell() {
 
   const user = auth.user;
   const staff = isStaffRole(user.role);
-  const admin = isAdminRole(user.role);
+  const admin = isAdministratorRole(user.role);
   const home = roleHome(user);
 
   return (

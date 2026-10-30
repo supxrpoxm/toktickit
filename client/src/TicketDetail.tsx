@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import ActionsTaken from "./ActionsTaken";
+import { UserRole, formatRoleDisplay } from "./roles";
 
 type TicketStatus = "Open" | "In Progress" | "Resolved" | "Closed" | string;
 
@@ -646,7 +647,7 @@ export default function TicketDetail({ ticketId, requesterId, requesterName = ''
             currentUser={{
               id: requesterId,
               name: requesterName || ticket.requester?.name || `Requester #${requesterId}`,
-              role: "Requester",
+              role: UserRole.REQUESTER,
             }}
           />
 
@@ -681,7 +682,7 @@ export default function TicketDetail({ ticketId, requesterId, requesterName = ''
                     <p className="small mb-1">
                       <span className="fw-semibold">{comment.author.name}</span>{" "}
                       <span className="badge rounded-pill bg-success-subtle text-success-emphasis ms-1">
-                        {comment.author.role}
+                        {formatRoleDisplay(comment.author.role)}
                       </span>{" "}
                       <span className="text-muted">· {formatDate(comment.createdAt)}</span>
                     </p>
