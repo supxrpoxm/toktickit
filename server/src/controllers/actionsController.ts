@@ -315,10 +315,48 @@ function actionId(req: Request): number | null {
 }
 
 // GET /api/staff/tickets/:id/actions — staff action timeline.
+//
+// Optional filters:
+//   performedById=<id>       only actions recorded by that staff member
+//   followUpRequired=true|false
+//   sort=newest|oldest       default newest (actionAt DESC, id DESC)
+// Pagination is page/limit (limit capped at 50).
 export async function listActions(req: Request, res: Response) {
   try {
     const ticketId = toSafeInt(req.params.id);
     if (ticketId === null || ticketId <= 0) return res.status(404).json(notFoundError());
+
+    const fields: Record<string, string> = {};
+
+    let performedById: number | undefined;
+    if (req.query.performedById !== undefined) {
+      const parsed = toSafeInt(req.query.performedById);
+      if (parsed === null || parsed <= 0) {
+        fields.performedById = "Filter by a valid staff user id.";
+      } else {
+        performedById = parsed;
+      }
+    }
+
+    let followUpRequired: boolean | undefined;
+    if (req.query.followUpRequired !== undefined) {
+      if (req.query.followUpRequired === "true") {
+        followUpRequired = true;
+      } else if (req.query.followUpRequired === "false") {
+        followUpRequired = false;
+      } else {
+        fields.followUpRequired = "Filter must be true or false.";
+      }
+    }
+
+    const sort = req.query.sort === undefined ? "newest" : req.query.sort;
+    if (sort !== "newest" && sort !== "oldest") {
+      fields.sort = "Sort must be newest or oldest.";
+    }
+
+    if (Object.keys(fields).length > 0) {
+      return res.status(400).json(validationError("Action filters are invalid.", fields));
+    }
 
     const prisma = getPrisma();
     const ticket = await prisma.ticket.findUnique({ where: { id: ticketId }, select: { id: true } });
@@ -328,15 +366,25 @@ export async function listActions(req: Request, res: Response) {
     const limit = Math.min(50, Math.max(1, toSafeInt(req.query.limit) ?? 20));
     const skip = (page - 1) * limit;
 
+    const where = {
+      ticketId,
+      ...(performedById !== undefined ? { performedById } : {}),
+      ...(followUpRequired !== undefined ? { followUpRequired } : {}),
+    };
+    const orderBy =
+      sort === "oldest"
+        ? [{ actionAt: "asc" as const }, { id: "asc" as const }]
+        : [{ actionAt: "desc" as const }, { id: "desc" as const }];
+
     const [items, total] = await Promise.all([
       prisma.actionTaken.findMany({
-        where: { ticketId },
+        where,
         select: actionSelect,
-        orderBy: [{ actionAt: "desc" }, { id: "desc" }],
+        orderBy,
         skip,
         take: limit,
       }),
-      prisma.actionTaken.count({ where: { ticketId } }),
+      prisma.actionTaken.count({ where }),
     ]);
 
     return res.status(200).json({

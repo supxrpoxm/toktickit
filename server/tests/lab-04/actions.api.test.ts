@@ -238,6 +238,51 @@ describe("Lab 4 Actions Taken API (Issue 2)", () => {
     });
   });
 
+  it("filters the timeline by staff user and follow-up flag, with oldest-first sorting", async () => {
+    const cookie = await loginAs("staff1@company.com");
+    prisma.actionTaken.findMany.mockResolvedValue([makeAction()]);
+    prisma.actionTaken.count.mockResolvedValue(1);
+
+    const response = await request(app)
+      .get(
+        "/api/staff/tickets/101/actions?performedById=7&followUpRequired=true&sort=oldest&page=2&limit=5",
+      )
+      .set("Cookie", cookie);
+
+    expect(response.status).toBe(200);
+    expect(prisma.actionTaken.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { ticketId: 101, performedById: 7, followUpRequired: true },
+        orderBy: [{ actionAt: "asc" }, { id: "asc" }],
+        skip: 5,
+        take: 5,
+      }),
+    );
+    expect(prisma.actionTaken.count).toHaveBeenCalledWith({
+      where: { ticketId: 101, performedById: 7, followUpRequired: true },
+    });
+  });
+
+  it("rejects invalid timeline filters before querying actions", async () => {
+    const cookie = await loginAs("staff1@company.com");
+
+    const response = await request(app)
+      .get(
+        "/api/staff/tickets/101/actions?performedById=abc&followUpRequired=maybe&sort=random",
+      )
+      .set("Cookie", cookie);
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+    expect(response.body.error.fields).toMatchObject({
+      performedById: expect.any(String),
+      followUpRequired: expect.any(String),
+      sort: expect.any(String),
+    });
+    expect(prisma.actionTaken.findMany).not.toHaveBeenCalled();
+    expect(prisma.actionTaken.count).not.toHaveBeenCalled();
+  });
+
   it("updates an action with a matching version and increments it (AC-07)", async () => {
     const cookie = await loginAs("staff1@company.com");
     prisma.actionTaken.findFirst
