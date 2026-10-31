@@ -222,41 +222,69 @@ export default function RequesterDashboard({
                   {data.recentTickets.length === 0 ? (
                     <PanelEmpty>You haven&apos;t created a ticket yet.</PanelEmpty>
                   ) : (
-                    <div className="table-responsive">
-                      <table className="table table-hover align-middle mb-0">
-                        <thead className="table-light">
-                          <tr>
-                            <th scope="col">Ticket</th>
-                            <th scope="col">Summary</th>
-                            <th scope="col">Status</th>
-                            <th scope="col">IT Priority</th>
-                            <th scope="col">Updated</th>
-                            <th scope="col"><span className="visually-hidden">Open</span></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {data.recentTickets.map((ticket) => (
-                            <tr key={ticket.id}>
-                              <td className="fw-semibold text-nowrap">{ticket.ticketNumber}</td>
-                              <td className="text-break">{ticket.title}</td>
-                              <td><StatusBadge status={ticket.status} /></td>
-                              <td>{ticket.itPriority ? <PriorityBadge priority={ticket.itPriority} /> : "—"}</td>
-                              <td className="text-nowrap">{formatDate(ticket.updatedAt)}</td>
-                              <td>
-                                <button
-                                  type="button"
-                                  className="btn btn-sm btn-outline-success"
-                                  onClick={() => onOpenTicket(ticket.id)}
-                                  aria-label={`Open ticket ${ticket.ticketNumber}`}
-                                >
-                                  Open
-                                </button>
-                              </td>
+                    <>
+                      <div className="table-responsive d-none d-md-block requester-dashboard-table">
+                        <table className="table table-hover align-middle mb-0">
+                          <thead className="table-light">
+                            <tr>
+                              <th scope="col">Ticket</th>
+                              <th scope="col">Summary</th>
+                              <th scope="col">Status</th>
+                              <th scope="col">IT Priority</th>
+                              <th scope="col">Updated</th>
+                              <th scope="col"><span className="visually-hidden">Open</span></th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody>
+                            {data.recentTickets.map((ticket) => (
+                              <tr key={ticket.id}>
+                                <td className="fw-semibold text-nowrap">{ticket.ticketNumber}</td>
+                                <td className="text-break">{ticket.title}</td>
+                                <td><StatusBadge status={ticket.status} /></td>
+                                <td>{ticket.itPriority ? <PriorityBadge priority={ticket.itPriority} /> : "—"}</td>
+                                <td className="text-nowrap">{formatDate(ticket.updatedAt)}</td>
+                                <td>
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-outline-success"
+                                    onClick={() => onOpenTicket(ticket.id)}
+                                    aria-label={`Open ticket ${ticket.ticketNumber}`}
+                                  >
+                                    Open
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="d-md-none d-flex flex-column gap-2">
+                        {data.recentTickets.map((ticket) => (
+                          <article
+                            key={ticket.id}
+                            className="requester-dashboard-mobile-card border rounded-3 bg-white p-3"
+                          >
+                            <div className="d-flex justify-content-between align-items-center gap-2">
+                              <span className="fw-semibold">{ticket.ticketNumber}</span>
+                              <StatusBadge status={ticket.status} />
+                            </div>
+                            <h3 className="h6 text-break mt-2 mb-2">{ticket.title}</h3>
+                            <div className="d-flex flex-wrap align-items-center gap-2 small text-muted mb-3">
+                              {ticket.itPriority && <PriorityBadge priority={ticket.itPriority} />}
+                              <span>Updated {formatDate(ticket.updatedAt)}</span>
+                            </div>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-success"
+                              onClick={() => onOpenTicket(ticket.id)}
+                              aria-label={`Open ticket ${ticket.ticketNumber}`}
+                            >
+                              Open ticket
+                            </button>
+                          </article>
+                        ))}
+                      </div>
+                    </>
                   )}
                 </div>
               </section>
@@ -302,47 +330,78 @@ export default function RequesterDashboard({
                   {data.latestActions.length === 0 ? (
                     <PanelEmpty>No actions have been recorded yet.</PanelEmpty>
                   ) : (
-                    <div className="table-responsive">
-                      <table className="table table-hover align-middle mb-0">
-                        <thead className="table-light">
-                          <tr>
-                            <th scope="col">Status</th>
-                            <th scope="col">Summary</th>
-                            <th scope="col">Ticket</th>
-                            <th scope="col">Performer</th>
-                            <th scope="col">When</th>
-                            <th scope="col"><span className="visually-hidden">Open</span></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {data.latestActions.map((action: DashboardActionItem) => (
-                            <tr key={action.id}>
-                              <td><StatusBadge status={action.status} /></td>
-                              <td className="text-break">{action.summary}</td>
-                              <td className="text-break">
-                                <div className="fw-semibold">{action.ticketNumber}</div>
-                                <div className="small text-muted">{action.ticketTitle}</div>
-                              </td>
-                              <td className="text-break">
-                                <div>{action.performedBy.name}</div>
-                                <div className="small text-muted">{action.performedBy.role}</div>
-                              </td>
-                              <td className="text-nowrap">{formatDateTime(action.completedAt ?? action.updatedAt)}</td>
-                              <td>
-                                <button
-                                  type="button"
-                                  className="btn btn-sm btn-outline-success"
-                                  onClick={() => onOpenTicket(action.ticketId)}
-                                  aria-label={`Open ticket ${action.ticketNumber}`}
-                                >
-                                  Open
-                                </button>
-                              </td>
+                    <>
+                      <div className="table-responsive d-none d-md-block requester-dashboard-table">
+                        <table className="table table-hover align-middle mb-0">
+                          <thead className="table-light">
+                            <tr>
+                              <th scope="col">Status</th>
+                              <th scope="col">Summary</th>
+                              <th scope="col">Ticket</th>
+                              <th scope="col">Performer</th>
+                              <th scope="col">When</th>
+                              <th scope="col"><span className="visually-hidden">Open</span></th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody>
+                            {data.latestActions.map((action: DashboardActionItem) => (
+                              <tr key={action.id}>
+                                <td><StatusBadge status={action.status} /></td>
+                                <td className="text-break">{action.summary}</td>
+                                <td className="text-break">
+                                  <div className="fw-semibold">{action.ticketNumber}</div>
+                                  <div className="small text-muted">{action.ticketTitle}</div>
+                                </td>
+                                <td className="text-break">
+                                  <div>{action.performedBy.name}</div>
+                                  <div className="small text-muted">{action.performedBy.role}</div>
+                                </td>
+                                <td className="text-nowrap">{formatDateTime(action.completedAt ?? action.updatedAt)}</td>
+                                <td>
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-outline-success"
+                                    onClick={() => onOpenTicket(action.ticketId)}
+                                    aria-label={`Open ticket ${action.ticketNumber}`}
+                                  >
+                                    Open
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="d-md-none d-flex flex-column gap-2">
+                        {data.latestActions.map((action: DashboardActionItem) => (
+                          <article
+                            key={action.id}
+                            className="requester-dashboard-mobile-card border rounded-3 bg-white p-3"
+                          >
+                            <div className="d-flex flex-wrap align-items-center gap-2 mb-2">
+                              <StatusBadge status={action.status} />
+                              <span className="badge rounded-pill bg-light text-dark border">
+                                {action.ticketNumber}
+                              </span>
+                            </div>
+                            <h3 className="h6 text-break mb-1">{action.summary}</h3>
+                            <p className="small text-muted text-break mb-2">{action.ticketTitle}</p>
+                            <p className="small text-muted mb-3">
+                              {action.performedBy.name} · {action.performedBy.role} ·{" "}
+                              {formatDateTime(action.completedAt ?? action.updatedAt)}
+                            </p>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-success"
+                              onClick={() => onOpenTicket(action.ticketId)}
+                              aria-label={`Open ticket ${action.ticketNumber}`}
+                            >
+                              Open ticket
+                            </button>
+                          </article>
+                        ))}
+                      </div>
+                    </>
                   )}
                 </div>
               </section>

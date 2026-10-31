@@ -104,7 +104,7 @@ describe("RequesterDashboard (Lab 4 Issue 5)", () => {
     expect(screen.getByRole("heading", { name: "Needs Your Attention" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Latest Actions Taken" })).toBeInTheDocument();
     expect(screen.getByText("IT is waiting for information from you.")).toBeInTheDocument();
-    expect(screen.getByText("Ordered a replacement battery.")).toBeInTheDocument();
+    expect(screen.getAllByText("Ordered a replacement battery.").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("Laptop will not boot").length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText(/Internal Notes/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /edit|complete|cancel|delete/i })).not.toBeInTheDocument();

@@ -282,43 +282,72 @@ export default function StaffDashboard({ onOpenTicket, onOpenQueue }: StaffDashb
                       </a>
                     </PanelEmpty>
                   ) : (
-                    <div className="table-responsive">
-                      <table className="table table-hover align-middle mb-0">
-                        <thead className="table-light">
-                          <tr>
-                            <th scope="col">Ticket</th>
-                            <th scope="col">Summary</th>
-                            <th scope="col">IT Priority</th>
-                            <th scope="col">Status</th>
-                            <th scope="col">Incomplete</th>
-                            <th scope="col">Updated</th>
-                            <th scope="col"><span className="visually-hidden">Open</span></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {data.myWork.map((ticket) => (
-                            <tr key={ticket.id}>
-                              <td className="fw-semibold text-nowrap">{ticket.ticketNumber}</td>
-                              <td className="text-break">{ticket.title}</td>
-                              <td>{ticket.itPriority ? <PriorityBadge priority={ticket.itPriority} /> : "—"}</td>
-                              <td><StatusBadge status={ticket.status} /></td>
-                              <td>{ticket.incompleteActionCount ?? 0}</td>
-                              <td className="text-nowrap">{formatDate(ticket.updatedAt)}</td>
-                              <td>
-                                <button
-                                  type="button"
-                                  className="btn btn-sm btn-outline-success"
-                                  onClick={() => onOpenTicket(ticket.id)}
-                                  aria-label={`Open ticket ${ticket.ticketNumber}`}
-                                >
-                                  Open
-                                </button>
-                              </td>
+                    <>
+                      <div className="table-responsive d-none d-md-block staff-dashboard-table">
+                        <table className="table table-hover align-middle mb-0">
+                          <thead className="table-light">
+                            <tr>
+                              <th scope="col">Ticket</th>
+                              <th scope="col">Summary</th>
+                              <th scope="col">IT Priority</th>
+                              <th scope="col">Status</th>
+                              <th scope="col">Incomplete</th>
+                              <th scope="col">Updated</th>
+                              <th scope="col"><span className="visually-hidden">Open</span></th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody>
+                            {data.myWork.map((ticket) => (
+                              <tr key={ticket.id}>
+                                <td className="fw-semibold text-nowrap">{ticket.ticketNumber}</td>
+                                <td className="text-break">{ticket.title}</td>
+                                <td>{ticket.itPriority ? <PriorityBadge priority={ticket.itPriority} /> : "—"}</td>
+                                <td><StatusBadge status={ticket.status} /></td>
+                                <td>{ticket.incompleteActionCount ?? 0}</td>
+                                <td className="text-nowrap">{formatDate(ticket.updatedAt)}</td>
+                                <td>
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-outline-success"
+                                    onClick={() => onOpenTicket(ticket.id)}
+                                    aria-label={`Open ticket ${ticket.ticketNumber}`}
+                                  >
+                                    Open
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="d-md-none d-flex flex-column gap-2">
+                        {data.myWork.map((ticket) => (
+                          <article
+                            key={ticket.id}
+                            className="staff-dashboard-mobile-card border rounded-3 bg-white p-3"
+                          >
+                            <div className="d-flex justify-content-between align-items-center gap-2">
+                              <span className="fw-semibold">{ticket.ticketNumber}</span>
+                              <StatusBadge status={ticket.status} />
+                            </div>
+                            <h3 className="h6 text-break mt-2 mb-2">{ticket.title}</h3>
+                            <div className="d-flex flex-wrap align-items-center gap-2 small text-muted mb-3">
+                              {ticket.itPriority && <PriorityBadge priority={ticket.itPriority} />}
+                              <span>Incomplete: {ticket.incompleteActionCount ?? 0}</span>
+                              <span>Updated {formatDate(ticket.updatedAt)}</span>
+                            </div>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-success"
+                              onClick={() => onOpenTicket(ticket.id)}
+                              aria-label={`Open ticket ${ticket.ticketNumber}`}
+                            >
+                              Open ticket
+                            </button>
+                          </article>
+                        ))}
+                      </div>
+                    </>
                   )}
                 </div>
               </section>
@@ -370,39 +399,64 @@ export default function StaffDashboard({ onOpenTicket, onOpenQueue }: StaffDashb
                   {data.unassigned.length === 0 ? (
                     <PanelEmpty>No unassigned tickets.</PanelEmpty>
                   ) : (
-                    <div className="table-responsive">
-                      <table className="table table-hover align-middle mb-0">
-                        <thead className="table-light">
-                          <tr>
-                            <th scope="col">Ticket</th>
-                            <th scope="col">Summary</th>
-                            <th scope="col">Priority</th>
-                            <th scope="col">Age</th>
-                            <th scope="col"><span className="visually-hidden">Open</span></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {data.unassigned.map((ticket) => (
-                            <tr key={ticket.id}>
-                              <td className="fw-semibold text-nowrap">{ticket.ticketNumber}</td>
-                              <td className="text-break">{ticket.title}</td>
-                              <td><PriorityBadge priority={ticket.itPriority ?? ticket.requestedPriority} /></td>
-                              <td className="text-nowrap">{ageInDays(ticket.updatedAt)}</td>
-                              <td>
-                                <button
-                                  type="button"
-                                  className="btn btn-sm btn-outline-success"
-                                  onClick={() => onOpenTicket(ticket.id)}
-                                  aria-label={`Open ticket ${ticket.ticketNumber}`}
-                                >
-                                  Open
-                                </button>
-                              </td>
+                    <>
+                      <div className="table-responsive d-none d-md-block staff-dashboard-table">
+                        <table className="table table-hover align-middle mb-0">
+                          <thead className="table-light">
+                            <tr>
+                              <th scope="col">Ticket</th>
+                              <th scope="col">Summary</th>
+                              <th scope="col">Priority</th>
+                              <th scope="col">Age</th>
+                              <th scope="col"><span className="visually-hidden">Open</span></th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody>
+                            {data.unassigned.map((ticket) => (
+                              <tr key={ticket.id}>
+                                <td className="fw-semibold text-nowrap">{ticket.ticketNumber}</td>
+                                <td className="text-break">{ticket.title}</td>
+                                <td><PriorityBadge priority={ticket.itPriority ?? ticket.requestedPriority} /></td>
+                                <td className="text-nowrap">{ageInDays(ticket.updatedAt)}</td>
+                                <td>
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-outline-success"
+                                    onClick={() => onOpenTicket(ticket.id)}
+                                    aria-label={`Open ticket ${ticket.ticketNumber}`}
+                                  >
+                                    Open
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="d-md-none d-flex flex-column gap-2">
+                        {data.unassigned.map((ticket) => (
+                          <article
+                            key={ticket.id}
+                            className="staff-dashboard-mobile-card border rounded-3 bg-white p-3"
+                          >
+                            <div className="d-flex justify-content-between align-items-center gap-2">
+                              <span className="fw-semibold">{ticket.ticketNumber}</span>
+                              <PriorityBadge priority={ticket.itPriority ?? ticket.requestedPriority} />
+                            </div>
+                            <h3 className="h6 text-break mt-2 mb-2">{ticket.title}</h3>
+                            <p className="small text-muted mb-3">Age: {ageInDays(ticket.updatedAt)}</p>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-success"
+                              onClick={() => onOpenTicket(ticket.id)}
+                              aria-label={`Open ticket ${ticket.ticketNumber}`}
+                            >
+                              Open ticket
+                            </button>
+                          </article>
+                        ))}
+                      </div>
+                    </>
                   )}
                 </div>
               </section>
