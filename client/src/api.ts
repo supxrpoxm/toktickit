@@ -332,11 +332,15 @@ export async function updateItPriority(id: number, itPriority: string): Promise<
   });
 }
 
-export async function updateTicketStatus(id: number, status: string): Promise<{ id: number; status: string; updatedAt: string }> {
+export async function updateTicketStatus(
+  id: number,
+  status: string,
+  updatedAt?: string,
+): Promise<{ id: number; status: string; updatedAt: string }> {
   return authRequest(`/api/staff/tickets/${id}/status`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ status }),
+    body: JSON.stringify(updatedAt ? { status, updatedAt } : { status }),
   });
 }
 
@@ -394,8 +398,15 @@ export async function postTicketComment(id: number, body: string): Promise<Ticke
   });
 }
 
-export async function signalProblemResolved(id: number): Promise<{ id: number; requesterResolved: boolean; requesterResolvedAt: string | null }> {
-  return authRequest(`/api/tickets/${id}/resolved-signal`, { method: "POST" });
+export async function signalProblemResolved(
+  id: number,
+  note?: string,
+): Promise<{ id: number; requesterResolved: boolean; requesterResolvedAt: string | null }> {
+  return authRequest(`/api/tickets/${id}/resolved-signal`, {
+    method: "POST",
+    headers: note !== undefined ? { "Content-Type": "application/json" } : undefined,
+    body: note !== undefined ? JSON.stringify({ note }) : undefined,
+  });
 }
 
 // ---------------------------------------------------------------------------
