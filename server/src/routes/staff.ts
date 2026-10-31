@@ -15,6 +15,8 @@ import {
   isValidTransition,
   isWorkflowStatus,
   notFoundError,
+  resolutionGateError,
+  staleTicketError,
   toEntryItem,
   toSafeInt,
   validationError,
@@ -406,8 +408,12 @@ router.patch("/tickets/:id/priority", async (req: Request, res: Response) => {
 
 // PATCH /api/staff/tickets/:id/status — permitted status change per the
 // transition matrix (BR-17, AC-15). Unknown status -> 400; illegal
-// transition -> 422 with the allowed list. Requesters cannot reach this
+// transition -> 400 with the allowed list. Requesters cannot reach this
 // route at all (router gate -> 403, AC-16).
+//
+// Lab 4 (Issue 4): `updatedAt` is an optional optimistic-concurrency token.
+// When supplied and stale, the write is rejected with 409 before the update.
+// Resolving requires at least one recorded Action Taken.
 router.patch("/tickets/:id/status", async (req: Request, res: Response) => {
   try {
     const ticketId = toSafeInt(req.params.id);
@@ -422,12 +428,35 @@ router.patch("/tickets/:id/status", async (req: Request, res: Response) => {
       );
     }
 
+    let expectedUpdatedAt: Date | null = null;
+    const rawUpdatedAt = req.body?.updatedAt;
+    if (rawUpdatedAt !== undefined && rawUpdatedAt !== null) {
+      const parsed =
+        rawUpdatedAt instanceof Date
+          ? rawUpdatedAt
+          : typeof rawUpdatedAt === "string" || typeof rawUpdatedAt === "number"
+            ? new Date(rawUpdatedAt)
+            : null;
+      if (!parsed || Number.isNaN(parsed.getTime())) {
+        return res.status(400).json(
+          validationError("The ticket version is invalid.", {
+            updatedAt: "Send the ticket's updatedAt timestamp from the latest response.",
+          }),
+        );
+      }
+      expectedUpdatedAt = parsed;
+    }
+
     const prisma = getPrisma();
     const ticket = await prisma.ticket.findUnique({
       where: { id: ticketId },
       select: { id: true, status: true, updatedAt: true },
     });
     if (!ticket) return res.status(404).json(notFoundError());
+
+    if (expectedUpdatedAt && ticket.updatedAt.getTime() !== expectedUpdatedAt.getTime()) {
+      return res.status(409).json(staleTicketError(ticket));
+    }
 
     if (ticket.status === next) {
       return res.status(200).json({
@@ -438,7 +467,7 @@ router.patch("/tickets/:id/status", async (req: Request, res: Response) => {
 
     if (!isValidTransition(ticket.status, next)) {
       const allowed = allowedTransitions(ticket.status);
-      return res.status(422).json({
+      return res.status(400).json({
         success: false,
         error: {
           code: "INVALID_TRANSITION",
@@ -449,6 +478,11 @@ router.patch("/tickets/:id/status", async (req: Request, res: Response) => {
           fields: { status: `Allowed transitions from ${ticket.status}: ${allowed.join(", ") || "none"}.` },
         },
       });
+    }
+
+    if (next === "Resolved") {
+      const actionCount = await prisma.actionTaken.count({ where: { ticketId } });
+      if (actionCount < 1) return res.status(409).json(resolutionGateError(actionCount));
     }
 
     const updated = await prisma.ticket.update({

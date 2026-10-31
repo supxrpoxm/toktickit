@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import ActionsTaken from "./ActionsTaken";
+import TicketWorkflow, { type TicketTransitionResult } from "./TicketWorkflow";
 import { UserRole, formatRoleDisplay, normalizeUserRole } from "./roles";
 import {
   AuthError,
@@ -11,7 +12,6 @@ import {
   postStaffNote,
   updateItPriority,
   updateTicketOwner,
-  updateTicketStatus,
   type StaffTicketDetail as StaffTicket,
   type StaffUser,
   type TicketEntry,
@@ -29,27 +29,7 @@ import {
 type DetailState = "loading" | "ready" | "not-found" | "forbidden" | "failed";
 type ThreadState = "loading" | "ready" | "failed";
 
-const TICKET_STATUSES = [
-  "New",
-  "Open",
-  "In Progress",
-  "Waiting for Requester",
-  "Resolved",
-  "Closed",
-  "Reopened",
-  "Cancelled",
-];
-
 const PRIORITIES = ["Low", "Medium", "High"];
-
-// Destructive targets require an explicit confirmation modal (BR-17).
-const CONFIRM_STATUSES = ["Cancelled", "Closed", "Reopened"];
-
-const CONFIRM_COPY: Record<string, string> = {
-  Cancelled: "Cancelling closes this ticket without a resolution. The requester will see the Cancelled status.",
-  Closed: "Closing marks this ticket as resolved and complete. The requester will see the Closed status.",
-  Reopened: "Reopening returns this ticket to active work for the requester and IT staff.",
-};
 
 const statusBadgeClass: Record<string, string> = {
   New: "bg-secondary-subtle text-secondary-emphasis border",
@@ -119,10 +99,7 @@ export default function StaffTicketDetail({
   const [priorityDraft, setPriorityDraft] = useState("");
   const [prioritySaving, setPrioritySaving] = useState(false);
   const [priorityError, setPriorityError] = useState("");
-  const [statusDraft, setStatusDraft] = useState("");
-  const [statusSaving, setStatusSaving] = useState(false);
-  const [statusError, setStatusError] = useState("");
-  const [pendingStatus, setPendingStatus] = useState<string | null>(null);
+  const [workflowRefreshKey, setWorkflowRefreshKey] = useState(0);
   const [toast, setToast] = useState("");
 
   // Discussion threads (newest-last; API returns createdAt ascending).
@@ -152,7 +129,6 @@ export default function StaffTicketDetail({
       setUsersFailed(false);
       setOwnerError("");
       setPriorityError("");
-      setStatusError("");
       setCommentError("");
       setNoteError("");
       try {
@@ -161,7 +137,6 @@ export default function StaffTicketDetail({
         setTicket(detail);
         setOwnerDraft(detail.owner ? String(detail.owner.id) : "");
         setPriorityDraft(detail.itPriority ?? detail.requestedPriority);
-        setStatusDraft(detail.status);
         setState("ready");
 
         // Threads and owner candidates load independently; one failure
@@ -262,29 +237,24 @@ export default function StaffTicketDetail({
     }
   }
 
-  function handleStatusSaveClick() {
-    if (!ticket || statusSaving) return;
-    setStatusError("");
-    if (statusDraft !== ticket.status && CONFIRM_STATUSES.includes(statusDraft)) {
-      setPendingStatus(statusDraft);
-      return;
-    }
-    void saveStatus(statusDraft);
-  }
-
-  async function saveStatus(next: string) {
+  async function handleWorkflowTransition(result: TicketTransitionResult) {
     if (!ticket) return;
-    setPendingStatus(null);
-    setStatusSaving(true);
-    setStatusError("");
+    setTicket((current) =>
+      current
+        ? { ...current, status: result.status, updatedAt: result.updatedAt ?? current.updatedAt }
+        : current,
+    );
+    setWorkflowRefreshKey((key) => key + 1);
+
+    // Refresh the authoritative summary (and remount ActionsTaken below) so a
+    // successful transition also updates the timeline without a page reload.
     try {
-      const result = await updateTicketStatus(ticket.id, next);
-      setTicket({ ...ticket, status: result.status, updatedAt: result.updatedAt ?? ticket.updatedAt });
-      flashToast(`Status changed to ${result.status}.`);
-    } catch (error) {
-      setStatusError(error instanceof AuthError ? fieldMessage(error) : "Unable to save the status right now.");
-    } finally {
-      setStatusSaving(false);
+      const detail = await fetchStaffTicket(ticket.id);
+      setTicket(detail);
+      setOwnerDraft(detail.owner ? String(detail.owner.id) : "");
+      setPriorityDraft(detail.itPriority ?? detail.requestedPriority);
+    } catch {
+      // Keep the optimistic status update if the refresh fails.
     }
   }
 
@@ -562,34 +532,21 @@ export default function StaffTicketDetail({
               </div>
 
               <div className="col-12 col-md-4">
-                <label htmlFor="staff-status-select" className="form-label fw-semibold small">Status</label>
-                <div className="d-flex gap-2">
-                  <select
-                    id="staff-status-select"
-                    className="form-select"
-                    value={statusDraft}
-                    onChange={(e) => setStatusDraft(e.target.value)}
-                    disabled={statusSaving}
-                    aria-describedby={statusError ? "staff-status-error" : undefined}
-                  >
-                    {TICKET_STATUSES.map((status) => (
-                      <option key={status} value={status}>{status}</option>
-                    ))}
-                  </select>
-                  <button type="button" className="btn btn-zen-secondary flex-shrink-0" onClick={handleStatusSaveClick} disabled={statusSaving}>
-                    {statusSaving ? "Saving..." : "Save status"}
-                  </button>
-                </div>
-                {statusError && (
-                  <p id="staff-status-error" className="zen-error-text mb-0" role="alert">{statusError}</p>
-                )}
+                <TicketWorkflow
+                  ticketId={ticket.id}
+                  status={ticket.status}
+                  updatedAt={ticket.updatedAt}
+                  currentUser={currentUser}
+                  onTransitioned={handleWorkflowTransition}
+                  onRefreshRequested={() => setRetryKey((key) => key + 1)}
+                />
               </div>
             </div>
           </section>
 
           <hr className="my-4" />
 
-          <ActionsTaken ticketId={ticket.id} currentUser={currentUser} />
+          <ActionsTaken key={workflowRefreshKey} ticketId={ticket.id} currentUser={currentUser} />
 
           <hr className="my-4" />
 
@@ -766,27 +723,6 @@ export default function StaffTicketDetail({
         </div>
       </div>
 
-      {/* Destructive-transition confirmation */}
-      {pendingStatus && (
-        <div className="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center p-3" style={{ backgroundColor: "rgba(0,0,0,0.45)", zIndex: 1050 }} role="dialog" aria-modal="true" aria-labelledby="status-confirm-heading">
-          <div className="card shadow border-0 w-100" style={{ maxWidth: 480 }}>
-            <div className="card-body p-4">
-              <h2 id="status-confirm-heading" className="h5 mb-2">Change status to {pendingStatus}?</h2>
-              <div className="alert alert-warning text-break" role="alert">
-                {CONFIRM_COPY[pendingStatus] ?? "This status change cannot be undone automatically."}
-              </div>
-              <div className="d-flex justify-content-end gap-2 mt-3">
-                <button type="button" className="btn btn-outline-secondary" onClick={() => setPendingStatus(null)} disabled={statusSaving}>
-                  Cancel
-                </button>
-                <button type="button" className="btn btn-zen-primary" onClick={() => void saveStatus(pendingStatus)} disabled={statusSaving}>
-                  {statusSaving ? "Saving..." : "Confirm change"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </main>
   );
 }

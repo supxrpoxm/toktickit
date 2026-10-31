@@ -1,6 +1,14 @@
 import React, { useEffect, useState } from "react";
 
-type TicketStatus = "Open" | "In Progress" | "Resolved" | "Closed";
+type TicketStatus =
+  | "New"
+  | "Open"
+  | "In Progress"
+  | "Waiting for Requester"
+  | "Resolved"
+  | "Closed"
+  | "Reopened"
+  | "Cancelled";
 type TicketPriority = "High" | "Medium" | "Low";
 
 type Ticket = {
@@ -12,10 +20,14 @@ type Ticket = {
 };
 
 const badgeClass: Record<TicketStatus, string> = {
+  New: "bg-secondary-subtle text-secondary-emphasis border",
   Open: "bg-success-subtle text-success-emphasis",
   "In Progress": "bg-warning-subtle text-warning-emphasis",
+  "Waiting for Requester": "bg-warning-subtle text-warning-emphasis border",
   Resolved: "bg-info-subtle text-info-emphasis",
   Closed: "bg-secondary-subtle text-secondary-emphasis",
+  Reopened: "bg-primary-subtle text-primary-emphasis",
+  Cancelled: "bg-danger-subtle text-danger-emphasis",
 };
 
 const priorityBadgeClass: Record<TicketPriority, string> = {
@@ -126,10 +138,14 @@ export default function MyTickets({ requesterId, onViewDetail, onCreateTicket }:
                 style={{ minWidth: 0 }}
               >
                 <option value="">All Status</option>
+                <option value="New">New</option>
                 <option value="Open">Open</option>
                 <option value="In Progress">In Progress</option>
+                <option value="Waiting for Requester">Waiting for Requester</option>
                 <option value="Resolved">Resolved</option>
                 <option value="Closed">Closed</option>
+                <option value="Reopened">Reopened</option>
+                <option value="Cancelled">Cancelled</option>
               </select>
 
               <label className="visually-hidden" htmlFor="sort-tickets">Sort tickets</label>

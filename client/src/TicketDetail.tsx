@@ -92,6 +92,7 @@ export default function TicketDetail({ ticketId, requesterId, requesterName = ''
   const [signalSaving, setSignalSaving] = useState(false);
   const [signalError, setSignalError] = useState("");
   const [signalConfirmOpen, setSignalConfirmOpen] = useState(false);
+  const [signalNote, setSignalNote] = useState("");
 
   useEffect(() => {
     const abortController = new AbortController();
@@ -314,6 +315,8 @@ export default function TicketDetail({ ticketId, requesterId, requesterName = ''
       const response = await fetch(`/api/tickets/${ticketId}/resolved-signal`, {
         method: "POST",
         credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note: signalNote.trim() }),
       });
       if (!response.ok) throw new Error("Unable to send this signal right now.");
       const result = (await response.json()) as {
@@ -326,6 +329,7 @@ export default function TicketDetail({ ticketId, requesterId, requesterName = ''
           : current,
       );
       setSignalConfirmOpen(false);
+      setSignalNote("");
     } catch (error) {
       setSignalError("Unable to send this signal right now. Please try again.");
     } finally {
@@ -504,7 +508,7 @@ export default function TicketDetail({ ticketId, requesterId, requesterName = ''
               <p className="mb-0">
                 <span className="badge rounded-pill bg-warning-subtle text-warning-emphasis border">
                   <i className="bi bi-info-circle me-1" aria-hidden="true" />
-                  You indicated this problem appears resolved
+                  You indicated this issue is resolved
                 </span>
                 <span className="d-block small text-muted mt-2">
                   IT staff will review and formally resolve or close the ticket.
@@ -515,13 +519,26 @@ export default function TicketDetail({ ticketId, requesterId, requesterName = ''
                 <p className="small text-muted mb-2">
                   If the problem looks fixed, let IT staff know. This does not close the ticket — only IT staff can resolve or close it.
                 </p>
+                <label htmlFor="requester-signal-note" className="form-label fw-semibold small">
+                  Advisory note (optional)
+                </label>
+                <textarea
+                  id="requester-signal-note"
+                  className="form-control mb-2"
+                  rows={2}
+                  maxLength={2000}
+                  value={signalNote}
+                  onChange={(event) => setSignalNote(event.target.value)}
+                  disabled={signalSaving}
+                  placeholder="Anything IT staff should know?"
+                />
                 <button
                   type="button"
                   className="btn btn-sm btn-zen-secondary"
                   onClick={() => setSignalConfirmOpen(true)}
                   disabled={signalSaving}
                 >
-                  {signalSaving ? "Sending..." : "Problem appears resolved"}
+                  {signalSaving ? "Sending..." : "Indicate Issue is Resolved"}
                 </button>
                 {signalError && (
                   <div className="alert alert-danger mt-2 mb-0" role="alert">{signalError}</div>
