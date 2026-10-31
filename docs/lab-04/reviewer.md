@@ -14,7 +14,7 @@ Issue 4: Ticket Workflow & Resolution Gate - [https://github.com/supxrpoxm/tokti
 
 Issue 5: Search, Filter & Role-Based Dashboards - [https://github.com/supxrpoxm/toktickit/pull/52]
 
-Issue 6: Final Hardening, Full Regression, and Release Integration - [https://github.com/supxrpoxm/toktickit/pull/55]
+Issue 6: Final Hardening, Full Regression, and Release Integration - [https://github.com/supxrpoxm/toktickit/pull/54]
 
 Test Accounts
 Administrator: admin@toktickit.com / Password123!
