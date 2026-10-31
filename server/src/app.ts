@@ -7,6 +7,7 @@ import authRouter from "./routes/auth.js";
 import staffRouter from "./routes/staff.js";
 import ticketsRouter from "./routes/tickets.js";
 import adminRouter from "./routes/admin.js";
+import requesterRouter from "./routes/requester.js";
 import { downloadAttachment, removeAttachment } from "./controllers/ticketsController.js";
 // getPrisma() is your lazy database handle. Call it INSIDE a route when you
 // need the DB (Issue 4). It is intentionally unused until then.
@@ -26,6 +27,7 @@ app.use(attachSession);
 app.use("/api/auth", authRouter);
 app.use("/api/staff", staffRouter);
 app.use("/api/tickets", ticketsRouter);
+app.use("/api/requester", requesterRouter);
 // Lab 3 (Issue 5) — minimalist user management. The canonical contract is
 // /api/admin/users (docs/lab-03/api-spec.md §7); the same router also serves
 // the /api/users aliases (PUT edit, reset-password) requested by stakeholders.

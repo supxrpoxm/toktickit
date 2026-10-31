@@ -5,6 +5,8 @@ import MyTickets from './MyTickets'; // ดึงหน้า My Tickets เข�
 import TicketDetail from './TicketDetail';
 import StaffTicketQueue from './StaffTicketQueue';
 import StaffTicketDetail from './StaffTicketDetail';
+import StaffDashboard, { type QueueFilterTarget } from './StaffDashboard';
+import RequesterDashboard from './RequesterDashboard';
 import UserManagement from './UserManagement';
 import Login from './Login';
 import ChangePassword from './ChangePassword';
@@ -84,6 +86,19 @@ function RequireStaff({ user, children }: { user: AuthUser; children: React.Reac
         message="This area is available to IT Staff and Administrators."
         backTo={roleHome(user)}
         backLabel="← Back to My Tickets"
+      />
+    );
+  }
+  return <>{children}</>;
+}
+
+function RequireRequester({ user, children }: { user: AuthUser; children: React.ReactNode }) {
+  if (isStaffRole(user.role)) {
+    return (
+      <ForbiddenPanel
+        message="This area is available to Requesters."
+        backTo={roleHome(user)}
+        backLabel="← Back"
       />
     );
   }
@@ -210,6 +225,8 @@ function AppShell() {
   const isMyTicketsActive = location.pathname === '/' || (/^\/tickets\/\d+\/?$/.test(location.pathname));
   const isCreateActive = location.pathname === '/tickets/new';
   const isQueueActive = location.pathname === '/staff/queue' || (/^\/staff\/tickets\/\d+\/?$/.test(location.pathname));
+  const isStaffDashboardActive = location.pathname === '/staff/dashboard';
+  const isRequesterDashboardActive = location.pathname === '/dashboard';
   const isUsersActive = location.pathname === '/admin/users';
 
   // Boot / failure shell.
@@ -269,6 +286,17 @@ function AppShell() {
   const admin = isAdministratorRole(user.role);
   const home = roleHome(user);
 
+  function openStaffQueue(filters: QueueFilterTarget = {}) {
+    const params = new URLSearchParams();
+    if (filters.search?.trim()) params.set('search', filters.search.trim());
+    if (filters.status) params.set('status', filters.status);
+    if (filters.priority) params.set('priority', filters.priority);
+    if (filters.department?.trim()) params.set('department', filters.department.trim());
+    if (filters.owner) params.set('owner', filters.owner);
+    const query = params.toString();
+    navigate(`/staff/queue${query ? `?${query}` : ''}`);
+  }
+
   return (
     <div style={{ backgroundColor: '#F5F7F6', minHeight: '100vh' }}>
 
@@ -283,6 +311,14 @@ function AppShell() {
             <ul className="navbar-nav flex-row flex-wrap me-auto mb-0">
               {staff ? (
                 <>
+                  <li className="nav-item me-3">
+                    <Link
+                      className={`nav-link d-flex align-items-center ${isStaffDashboardActive ? 'active fw-semibold' : ''}`}
+                      to="/staff/dashboard"
+                    >
+                      <i className="bi bi-speedometer2 me-1" aria-hidden="true"></i> Dashboard
+                    </Link>
+                  </li>
                   <li className="nav-item me-3">
                     <Link
                       className={`nav-link d-flex align-items-center ${isQueueActive ? 'active fw-semibold' : ''}`}
@@ -304,6 +340,14 @@ function AppShell() {
                 </>
               ) : (
                 <>
+                  <li className="nav-item me-3">
+                    <Link
+                      className={`nav-link d-flex align-items-center ${isRequesterDashboardActive ? 'active fw-semibold' : ''}`}
+                      to="/dashboard"
+                    >
+                      <i className="bi bi-speedometer2 me-1" aria-hidden="true"></i> Dashboard
+                    </Link>
+                  </li>
                   <li className="nav-item me-3">
                     <Link
                       className={`nav-link d-flex align-items-center ${isMyTicketsActive ? 'active fw-semibold' : ''}`}
@@ -393,11 +437,35 @@ function AppShell() {
             }
           />
           <Route
+            path="/staff/dashboard"
+            element={
+              <RequireStaff user={user}>
+                <StaffDashboard
+                  onOpenTicket={(id) => navigate(`/staff/tickets/${id}`)}
+                  onOpenQueue={openStaffQueue}
+                />
+              </RequireStaff>
+            }
+          />
+          <Route
             path="/staff/queue"
             element={
               <RequireStaff user={user}>
                 <StaffTicketQueue onOpenTicket={(id) => navigate(`/staff/tickets/${id}`)} />
               </RequireStaff>
+            }
+          />
+          <Route
+            path="/dashboard"
+            element={
+              <RequireRequester user={user}>
+                <RequesterDashboard
+                  userName={user.name}
+                  onOpenTicket={(id) => navigate(`/tickets/${id}`)}
+                  onCreateTicket={() => navigate('/tickets/new')}
+                  onOpenMyTickets={() => navigate('/')}
+                />
+              </RequireRequester>
             }
           />
           <Route
