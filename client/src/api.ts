@@ -240,10 +240,12 @@ export interface QueuePagination {
 export interface QueueParams {
   search?: string;
   status?: string;
+  priority?: string;
   itPriority?: string;
   requestedPriority?: string;
   owner?: string;
   categoryId?: string;
+  department?: string;
   sort?: string;
   page?: number;
   limit?: number;
@@ -253,10 +255,12 @@ export async function fetchStaffQueue(params: QueueParams): Promise<{ items: Que
   const query = new URLSearchParams();
   if (params.search?.trim()) query.set("search", params.search.trim());
   if (params.status) query.set("status", params.status);
+  if (params.priority) query.set("priority", params.priority);
   if (params.itPriority) query.set("itPriority", params.itPriority);
   if (params.requestedPriority) query.set("requestedPriority", params.requestedPriority);
   if (params.owner) query.set("owner", params.owner);
   if (params.categoryId) query.set("categoryId", params.categoryId);
+  if (params.department?.trim()) query.set("department", params.department.trim());
   if (params.sort) query.set("sort", params.sort);
   query.set("page", String(params.page ?? 1));
   query.set("limit", String(params.limit ?? 10));
@@ -479,6 +483,102 @@ export async function updateActionTaken(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+
+// ---------------------------------------------------------------------------
+// Lab 4 (Issue 5) — role-scoped dashboards. Both endpoints are pull/refetch
+// read models; `generatedAt` lets the header show data freshness.
+// ---------------------------------------------------------------------------
+
+export type DashboardWindow = "7d" | "30d" | "all";
+
+export interface DashboardTicketItem {
+  id: number;
+  ticketNumber: string;
+  title: string;
+  status: string;
+  requestedPriority: string;
+  itPriority: string | null;
+  owner: QueueOwner | null;
+  requester?: { id: number; name: string };
+  requesterResolved?: boolean;
+  category: string | null;
+  relatedSystem?: string | null;
+  incompleteActionCount?: number;
+  overdueActionCount?: number;
+  attentionReasons?: string[];
+  updatedAt: string;
+}
+
+export interface DashboardActionItem {
+  id: number;
+  ticketId: number;
+  ticketNumber: string;
+  ticketTitle: string;
+  summary: string;
+  details: string;
+  status: string;
+  performedBy: { id: number; name: string; role: string };
+  dueAt: string | null;
+  completedAt: string | null;
+  updatedAt: string;
+  description?: string;
+  result?: string;
+  followUpRequired?: boolean;
+}
+
+export interface StaffDashboardSummary {
+  myOpenTickets: number;
+  unassignedTickets: number;
+  inProgressTickets: number;
+  waitingForRequester: number;
+  requesterResolvedTickets: number;
+  incompleteActions: number;
+  overdueActions: number;
+}
+
+export interface StaffDashboardData {
+  summary: StaffDashboardSummary;
+  myWork: DashboardTicketItem[];
+  unassigned: DashboardTicketItem[];
+  attention: DashboardTicketItem[];
+  recentActions: DashboardActionItem[];
+  generatedAt: string;
+}
+
+export interface RequesterDashboardSummary {
+  totalTickets: number;
+  openTickets: number;
+  inProgressTickets: number;
+  waitingForRequester: number;
+  resolvedTickets: number;
+  closedTickets: number;
+  cancelledTickets: number;
+}
+
+export interface RequesterDashboardData {
+  summary: RequesterDashboardSummary;
+  recentTickets: DashboardTicketItem[];
+  latestActions: DashboardActionItem[];
+  needsAttention: DashboardTicketItem[];
+  generatedAt: string;
+}
+
+export async function fetchStaffDashboard(
+  params: { window?: DashboardWindow; limit?: number } = {},
+): Promise<StaffDashboardData> {
+  const query = new URLSearchParams();
+  if (params.window) query.set("window", params.window);
+  query.set("limit", String(params.limit ?? 5));
+  return authRequest<StaffDashboardData>(`/api/staff/dashboard?${query.toString()}`);
+}
+
+export async function fetchRequesterDashboard(
+  params: { limit?: number } = {},
+): Promise<RequesterDashboardData> {
+  const query = new URLSearchParams();
+  query.set("limit", String(params.limit ?? 5));
+  return authRequest<RequesterDashboardData>(`/api/requester/dashboard?${query.toString()}`);
 }
 
 export async function fetchCategories(): Promise<Category[]> {

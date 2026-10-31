@@ -106,14 +106,59 @@ export async function getTickets(req: Request, res: Response) {
     const validSortFields = ["createdAt", "status", "title", "priority", "id"];
     const safeSortBy = validSortFields.includes(sortBy) ? sortBy : "createdAt";
 
+    // Lab 4 (Issue 5) — keyword search plus status/priority/department
+    // filters. Unknown or empty values are ignored (never 500). Department is
+    // matched case-insensitively against the ticket's category or related
+    // system name, because the schema models departments as those labels.
+    const requestedPriority =
+      typeof req.query.requestedPriority === "string"
+        ? req.query.requestedPriority
+        : typeof req.query.priority === "string"
+          ? req.query.priority
+          : "";
+    const itPriority =
+      typeof req.query.itPriority === "string" ? req.query.itPriority : "";
+    const categoryId = toSafeNumber(req.query.categoryId);
+    const department =
+      typeof req.query.department === "string" ? req.query.department.trim() : "";
+
+    const validPriorities = ["Low", "Medium", "High"];
+    const validStatuses = [
+      "New",
+      "Open",
+      "In Progress",
+      "Waiting for Requester",
+      "Resolved",
+      "Closed",
+      "Cancelled",
+      "Reopened",
+    ];
+
     const where: any = {
       requesterId,
-      ...(status ? { status } : {}),
+      ...(validStatuses.includes(status) ? { status } : {}),
+      ...(validPriorities.includes(requestedPriority)
+        ? { priority: requestedPriority }
+        : {}),
+      ...(validPriorities.includes(itPriority) ? { itPriority } : {}),
+      ...(categoryId !== null ? { categoryId } : {}),
       ...(search
         ? {
           OR: [
             { title: { contains: search, mode: "insensitive" } },
             { description: { contains: search, mode: "insensitive" } },
+          ],
+        }
+        : {}),
+      ...(department
+        ? {
+          AND: [
+            {
+              OR: [
+                { category: { name: { contains: department, mode: "insensitive" } } },
+                { relatedSystem: { name: { contains: department, mode: "insensitive" } } },
+              ],
+            },
           ],
         }
         : {}),

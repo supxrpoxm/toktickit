@@ -45,6 +45,8 @@ type MyTicketsProps = {
 export default function MyTickets({ requesterId, onViewDetail, onCreateTicket }: MyTicketsProps) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [priorityFilter, setPriorityFilter] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState("");
   const [sortBy, setSortBy] = useState("createdAt");
   const [page, setPage] = useState(1);
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -59,6 +61,8 @@ export default function MyTickets({ requesterId, onViewDetail, onCreateTicket }:
 
     if (search.trim()) params.set("search", search.trim());
     if (statusFilter) params.set("status", statusFilter);
+    if (priorityFilter) params.set("priority", priorityFilter);
+    if (departmentFilter.trim()) params.set("department", departmentFilter.trim());
     if (sortBy) params.set("sortBy", sortBy);
     params.set("page", String(page));
 
@@ -95,7 +99,7 @@ export default function MyTickets({ requesterId, onViewDetail, onCreateTicket }:
     loadTickets();
 
     return () => abortController.abort();
-  }, [search, statusFilter, sortBy, page, requesterId, retryKey]);
+  }, [search, statusFilter, priorityFilter, departmentFilter, sortBy, page, requesterId, retryKey]);
 
   const pagerItems = Array.from({ length: totalPages }, (_, index) => index + 1);
 
@@ -148,6 +152,33 @@ export default function MyTickets({ requesterId, onViewDetail, onCreateTicket }:
                 <option value="Cancelled">Cancelled</option>
               </select>
 
+              <label className="visually-hidden" htmlFor="priority-filter">Filter by priority</label>
+              <select
+                id="priority-filter"
+                className="form-select w-100"
+                aria-label="Filter by priority"
+                value={priorityFilter}
+                onChange={(e) => { setPriorityFilter(e.target.value); setPage(1); }}
+                style={{ minWidth: 0 }}
+              >
+                <option value="">All Priorities</option>
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
+              </select>
+
+              <label className="visually-hidden" htmlFor="department-filter">Filter by department</label>
+              <input
+                id="department-filter"
+                type="text"
+                className="form-control w-100"
+                aria-label="Filter by department"
+                placeholder="Department"
+                value={departmentFilter}
+                onChange={(e) => { setDepartmentFilter(e.target.value); setPage(1); }}
+                style={{ minWidth: 0 }}
+              />
+
               <label className="visually-hidden" htmlFor="sort-tickets">Sort tickets</label>
               <select
                 id="sort-tickets"
@@ -184,7 +215,7 @@ export default function MyTickets({ requesterId, onViewDetail, onCreateTicket }:
             </div>
           )}
 
-          {!isLoading && !isError && tickets.length === 0 && !search && !statusFilter && (
+          {!isLoading && !isError && tickets.length === 0 && !search && !statusFilter && !priorityFilter && !departmentFilter.trim() && (
             <div className="text-center py-5 text-muted">
               <h5 className="mb-2">No tickets yet</h5>
               <p className="mb-3">You do not have any tickets yet. Create a new ticket to get started.</p>
@@ -196,7 +227,7 @@ export default function MyTickets({ requesterId, onViewDetail, onCreateTicket }:
             </div>
           )}
 
-          {!isLoading && !isError && tickets.length === 0 && (search.trim() !== "" || statusFilter !== "") && (
+          {!isLoading && !isError && tickets.length === 0 && (search.trim() !== "" || statusFilter !== "" || priorityFilter !== "" || departmentFilter.trim() !== "") && (
             <div className="text-center py-5 text-muted">
               <h5 className="mb-2">No matching tickets</h5>
               <p className="mb-0">Try adjusting your search or filters.</p>

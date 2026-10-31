@@ -75,6 +75,18 @@ export function requireStaff(req: Request, res: Response, next: NextFunction) {
     error: { code: "FORBIDDEN", message: "You don't have access to this area." },
   });
 }
+// Role gate for requester-only endpoints (Lab 4, Issue 5). Only active
+// Requester sessions pass; staff and administrators get 403 FORBIDDEN so the
+// requester dashboard can never leak another role's view.
+export function requireRequester(req: Request, res: Response, next: NextFunction) {
+  if (req.authUser?.role === "REQUESTER") {
+    return next();
+  }
+  return res.status(403).json({
+    success: false,
+    error: { code: "FORBIDDEN", message: "You don't have access to this area." },
+  });
+}
 // Role gate for administrator-only endpoints (Lab 3, Issue 5). Only active
 // Administrator sessions pass; every other authenticated role gets 403
 // FORBIDDEN with NO protected payload (matrix §5.5, AC-29).

@@ -6,6 +6,7 @@ import {
   listActions,
   updateAction,
 } from "../controllers/actionsController.js";
+import { getStaffDashboard } from "../controllers/dashboardController.js";
 import { getPrisma } from "../prisma.js";
 import {
   allowedTransitions,
@@ -105,8 +106,28 @@ function queueWhere(query: Request["query"], sessionUserId: number): Record<stri
     if (ownerId !== null && ownerId > 0) and.push({ ownerId });
   }
 
+  // Lab 4 (Issue 5) — a single priority filter matching either the requested
+  // or IT priority, so "show me High priority work" never misses tickets.
+  const priority = typeof query.priority === "string" ? query.priority : "all";
+  if ((PRIORITIES as readonly string[]).includes(priority)) {
+    and.push({ OR: [{ priority }, { itPriority: priority }] });
+  }
+
   const categoryId = toSafeInt(query.categoryId);
   if (categoryId !== null && categoryId > 0) and.push({ categoryId });
+
+  // Department maps to the category or related-system label; both are stored
+  // as free-text names in the schema, so match case-insensitively.
+  const department =
+    typeof query.department === "string" ? query.department.trim().slice(0, 100) : "";
+  if (department) {
+    and.push({
+      OR: [
+        { category: { name: { contains: department, mode: "insensitive" } } },
+        { relatedSystem: { name: { contains: department, mode: "insensitive" } } },
+      ],
+    });
+  }
 
   return and.length > 0 ? { AND: and } : {};
 }
@@ -159,6 +180,9 @@ function toQueueItem(ticket: {
     updatedAt: ticket.updatedAt,
   };
 }
+
+// GET /api/staff/dashboard — Lab 4 (Issue 5) operational summary.
+router.get("/dashboard", getStaffDashboard);
 
 // GET /api/staff/tickets — shared queue with search, filters, sort,
 // pagination. Invalid query values fall back to defaults (BR-22).
