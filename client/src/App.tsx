@@ -5,10 +5,19 @@ import MyTickets from './MyTickets'; // ดึงหน้า My Tickets เข�
 import TicketDetail from './TicketDetail';
 import StaffTicketQueue from './StaffTicketQueue';
 import StaffTicketDetail from './StaffTicketDetail';
+import StaffDashboard, { type QueueFilterTarget } from './StaffDashboard';
+import RequesterDashboard from './RequesterDashboard';
 import UserManagement from './UserManagement';
 import Login from './Login';
 import ChangePassword from './ChangePassword';
 import { fetchMe, logout, type AuthUser } from './api';
+import {
+  UserRole,
+  formatRoleDisplay,
+  isAdministratorRole,
+  isStaffRole,
+  normalizeUserRole,
+} from './roles';
 
 // Legacy Lab 2 storage key. The Development Requester selector is removed;
 // any stale value is ignored and cleared on boot.
@@ -23,15 +32,16 @@ function clearLegacyRequesterState() {
 }
 
 function roleBadgeStyle(role: string): React.CSSProperties {
-  if (role === 'Administrator') return { backgroundColor: '#006B3C', color: '#fff' };
-  if (role === 'IT Staff') return { backgroundColor: '#0B7A46', color: '#fff' };
+  const normalized = normalizeUserRole(role);
+  if (normalized === UserRole.ADMINISTRATOR) return { backgroundColor: '#006B3C', color: '#fff' };
+  if (normalized === UserRole.IT_STAFF) return { backgroundColor: '#0B7A46', color: '#fff' };
   return { backgroundColor: '#EAF6EF', color: '#006B3C', border: '1px solid #006B3C' };
 }
 
 export function RoleBadge({ role }: { role: string }) {
   return (
     <span className="badge rounded-pill" style={roleBadgeStyle(role)}>
-      {role}
+      {formatRoleDisplay(role)}
     </span>
   );
 }
@@ -47,20 +57,12 @@ type TicketDetailRouteProps = {
   onBack: () => void;
 };
 
-function isStaffRole(role: string): boolean {
-  return role === 'IT Staff' || role === 'Administrator';
-}
-
-function isAdminRole(role: string): boolean {
-  return role === 'Administrator';
-}
-
 // Role homes (Lab 3, Issue 5): Requesters land on My Tickets, IT Staff on
 // the shared ticket queue, Administrators on User Management. Administrators
 // keep deep-link access to the staff queue (RequireStaff still permits the
 // role, preserving Issue 3 behavior).
 function roleHome(user: AuthUser): string {
-  if (isAdminRole(user.role)) return '/admin/users';
+  if (isAdministratorRole(user.role)) return '/admin/users';
   return isStaffRole(user.role) ? '/staff/queue' : '/';
 }
 
@@ -90,8 +92,21 @@ function RequireStaff({ user, children }: { user: AuthUser; children: React.Reac
   return <>{children}</>;
 }
 
+function RequireRequester({ user, children }: { user: AuthUser; children: React.ReactNode }) {
+  if (isStaffRole(user.role)) {
+    return (
+      <ForbiddenPanel
+        message="This area is available to Requesters."
+        backTo={roleHome(user)}
+        backLabel="← Back"
+      />
+    );
+  }
+  return <>{children}</>;
+}
+
 function RequireAdmin({ user, children }: { user: AuthUser; children: React.ReactNode }) {
-  if (!isAdminRole(user.role)) {
+  if (!isAdministratorRole(user.role)) {
     return (
       <ForbiddenPanel
         message="This area is available to Administrators."
@@ -103,7 +118,7 @@ function RequireAdmin({ user, children }: { user: AuthUser; children: React.Reac
   return <>{children}</>;
 }
 
-function StaffTicketDetailRoute({ onBack }: { onBack: () => void }) {
+function StaffTicketDetailRoute({ user, onBack }: { user: AuthUser; onBack: () => void }) {
   const { id } = useParams();
   const ticketId = Number(id);
 
@@ -111,7 +126,13 @@ function StaffTicketDetailRoute({ onBack }: { onBack: () => void }) {
     return <Navigate to="/staff/queue" replace />;
   }
 
-  return <StaffTicketDetail ticketId={ticketId} onBack={onBack} />;
+  return (
+    <StaffTicketDetail
+      ticketId={ticketId}
+      onBack={onBack}
+      currentUser={{ id: user.id, name: user.name, role: user.role }}
+    />
+  );
 }
 
 function TicketDetailRoute({ user, onBack }: TicketDetailRouteProps) {
@@ -204,6 +225,8 @@ function AppShell() {
   const isMyTicketsActive = location.pathname === '/' || (/^\/tickets\/\d+\/?$/.test(location.pathname));
   const isCreateActive = location.pathname === '/tickets/new';
   const isQueueActive = location.pathname === '/staff/queue' || (/^\/staff\/tickets\/\d+\/?$/.test(location.pathname));
+  const isStaffDashboardActive = location.pathname === '/staff/dashboard';
+  const isRequesterDashboardActive = location.pathname === '/dashboard';
   const isUsersActive = location.pathname === '/admin/users';
 
   // Boot / failure shell.
@@ -260,8 +283,19 @@ function AppShell() {
 
   const user = auth.user;
   const staff = isStaffRole(user.role);
-  const admin = isAdminRole(user.role);
+  const admin = isAdministratorRole(user.role);
   const home = roleHome(user);
+
+  function openStaffQueue(filters: QueueFilterTarget = {}) {
+    const params = new URLSearchParams();
+    if (filters.search?.trim()) params.set('search', filters.search.trim());
+    if (filters.status) params.set('status', filters.status);
+    if (filters.priority) params.set('priority', filters.priority);
+    if (filters.department?.trim()) params.set('department', filters.department.trim());
+    if (filters.owner) params.set('owner', filters.owner);
+    const query = params.toString();
+    navigate(`/staff/queue${query ? `?${query}` : ''}`);
+  }
 
   return (
     <div style={{ backgroundColor: '#F5F7F6', minHeight: '100vh' }}>
@@ -277,6 +311,14 @@ function AppShell() {
             <ul className="navbar-nav flex-row flex-wrap me-auto mb-0">
               {staff ? (
                 <>
+                  <li className="nav-item me-3">
+                    <Link
+                      className={`nav-link d-flex align-items-center ${isStaffDashboardActive ? 'active fw-semibold' : ''}`}
+                      to="/staff/dashboard"
+                    >
+                      <i className="bi bi-speedometer2 me-1" aria-hidden="true"></i> Dashboard
+                    </Link>
+                  </li>
                   <li className="nav-item me-3">
                     <Link
                       className={`nav-link d-flex align-items-center ${isQueueActive ? 'active fw-semibold' : ''}`}
@@ -298,6 +340,14 @@ function AppShell() {
                 </>
               ) : (
                 <>
+                  <li className="nav-item me-3">
+                    <Link
+                      className={`nav-link d-flex align-items-center ${isRequesterDashboardActive ? 'active fw-semibold' : ''}`}
+                      to="/dashboard"
+                    >
+                      <i className="bi bi-speedometer2 me-1" aria-hidden="true"></i> Dashboard
+                    </Link>
+                  </li>
                   <li className="nav-item me-3">
                     <Link
                       className={`nav-link d-flex align-items-center ${isMyTicketsActive ? 'active fw-semibold' : ''}`}
@@ -387,6 +437,17 @@ function AppShell() {
             }
           />
           <Route
+            path="/staff/dashboard"
+            element={
+              <RequireStaff user={user}>
+                <StaffDashboard
+                  onOpenTicket={(id) => navigate(`/staff/tickets/${id}`)}
+                  onOpenQueue={openStaffQueue}
+                />
+              </RequireStaff>
+            }
+          />
+          <Route
             path="/staff/queue"
             element={
               <RequireStaff user={user}>
@@ -395,10 +456,23 @@ function AppShell() {
             }
           />
           <Route
+            path="/dashboard"
+            element={
+              <RequireRequester user={user}>
+                <RequesterDashboard
+                  userName={user.name}
+                  onOpenTicket={(id) => navigate(`/tickets/${id}`)}
+                  onCreateTicket={() => navigate('/tickets/new')}
+                  onOpenMyTickets={() => navigate('/')}
+                />
+              </RequireRequester>
+            }
+          />
+          <Route
             path="/staff/tickets/:id"
             element={
               <RequireStaff user={user}>
-                <StaffTicketDetailRoute onBack={() => navigate('/staff/queue')} />
+                <StaffTicketDetailRoute user={user} onBack={() => navigate('/staff/queue')} />
               </RequireStaff>
             }
           />

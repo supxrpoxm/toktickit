@@ -58,21 +58,15 @@ describe("Login (lab-03)", () => {
   });
 
   it("shows a busy state and calls onSuccess on valid login", async () => {
+    type LoginResponse = { ok: boolean; status: number; json: () => Promise<unknown> };
+    let resolveLogin!: (value: LoginResponse) => void;
     vi.stubGlobal(
       "fetch",
       vi.fn(
         () =>
-          new Promise((resolve) =>
-            setTimeout(
-              () =>
-                resolve({
-                  ok: true,
-                  status: 200,
-                  json: async () => ({ success: true, data: { user: validUser } }),
-                }),
-              50,
-            ),
-          ),
+          new Promise<LoginResponse>((resolve) => {
+            resolveLogin = resolve;
+          }),
       ),
     );
     const onSuccess = vi.fn();
@@ -83,6 +77,11 @@ describe("Login (lab-03)", () => {
     await userEvent.click(screen.getByRole("button", { name: /^Sign in$/ }));
 
     expect(await screen.findByRole("button", { name: /Signing in/ })).toHaveProperty("disabled", true);
+    resolveLogin({
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true, data: { user: validUser } }),
+    });
     await waitFor(() => expect(onSuccess).toHaveBeenCalledWith(validUser));
   });
 

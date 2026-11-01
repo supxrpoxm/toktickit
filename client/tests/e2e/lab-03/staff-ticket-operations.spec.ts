@@ -70,17 +70,17 @@ function freshWorld(): World {
   };
 }
 
-// Mirror of the server transition matrix (specification BR-17) so the mock
-// API enforces legal vs. illegal transitions like the real backend.
+// Mirror of the Lab 4 server transition matrix so the mock API enforces legal
+// vs. illegal transitions like the real backend.
 const ALLOWED: Record<string, string[]> = {
   New: ["Open", "Cancelled"],
   Open: ["In Progress", "Waiting for Requester", "Cancelled"],
   "In Progress": ["Waiting for Requester", "Resolved", "Cancelled"],
   "Waiting for Requester": ["In Progress", "Resolved", "Cancelled"],
   Resolved: ["Closed", "Reopened"],
-  Closed: ["Reopened"],
-  Cancelled: ["Reopened"],
-  Reopened: ["Open", "In Progress", "Cancelled"],
+  Closed: [],
+  Cancelled: [],
+  Reopened: ["In Progress", "Resolved", "Cancelled"],
 };
 
 function staffDetailBody(world: World) {
@@ -207,7 +207,7 @@ async function mockWorld(page: Page, session: typeof STAFF | typeof REQUESTER, w
       const next = body.status ?? "";
       if (!(ALLOWED[world.status] ?? []).includes(next)) {
         const allowed = ALLOWED[world.status] ?? [];
-        await fulfill(route, 422, {
+        await fulfill(route, 400, {
           success: false,
           error: {
             code: "INVALID_TRANSITION",
@@ -344,31 +344,27 @@ test.describe("lab-03 staff ticket operations (E-02 detail part)", () => {
     await expect(page.getByText("IT Priority set to Low.")).toBeVisible();
 
     // Non-destructive transition applies immediately.
-    await page.getByLabel("Status", { exact: true }).selectOption("In Progress");
-    await page.getByRole("button", { name: "Save status" }).click();
+    await page.getByRole("button", { name: "In Progress" }).click();
     await expect(page.getByText("Status changed to In Progress.")).toBeVisible();
   });
 
-  test("destructive status changes require confirmation, illegal ones show the allowed list", async ({ page }) => {
+  test("destructive status changes require confirmation and terminal states lock", async ({ page }) => {
     await mockWorld(page, STAFF, freshWorld());
     await page.goto("/staff/tickets/101");
 
     await expect(page.getByRole("heading", { name: "Cannot login to VPN" })).toBeVisible();
 
     // Destructive target opens a confirmation modal first.
-    await page.getByLabel("Status", { exact: true }).selectOption("Cancelled");
-    await page.getByRole("button", { name: "Save status" }).click();
+    await page.getByRole("button", { name: "Cancelled" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toContainText("Change status to Cancelled?");
     await expect(dialog).toContainText("without a resolution");
     await dialog.getByRole("button", { name: "Confirm change" }).click();
     await expect(page.getByText("Status changed to Cancelled.")).toBeVisible();
 
-    // From Cancelled, only Reopened is legal — Closed is rejected with the list.
-    await page.getByLabel("Status", { exact: true }).selectOption("Closed");
-    await page.getByRole("button", { name: "Save status" }).click();
-    await page.getByRole("dialog").getByRole("button", { name: "Confirm change" }).click();
-    await expect(page.getByText(/Allowed: Reopened/)).toBeVisible();
+    // Cancelled is terminal: no further formal transition is offered.
+    await expect(page.getByText(/terminal state \(Cancelled\)/)).toBeVisible();
+    await expect(page.getByRole("group", { name: "Permitted status transitions" })).not.toBeVisible();
   });
 
   test("ownership changes and threads stay separated end to end", async ({ page }) => {
@@ -418,11 +414,12 @@ test.describe("lab-03 staff ticket operations (E-02 detail part)", () => {
     await expect(page.getByRole("heading", { name: /Internal notes/ })).not.toBeVisible();
     await expect(page.getByText("Checking VPN logs for this user.")).not.toBeVisible();
 
-    // Requesters cannot formally close: no status control, only the signal.
-    await expect(page.getByLabel("Status", { exact: true })).not.toBeVisible();
-    await page.getByRole("button", { name: "Problem appears resolved" }).click();
+    // Requesters cannot formally close: no status controls, only the advisory signal.
+    await expect(page.getByRole("group", { name: "Permitted status transitions" })).not.toBeVisible();
+    await page.getByLabel("Advisory note (optional)").fill("The VPN works again.");
+    await page.getByRole("button", { name: "Indicate Issue is Resolved" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Confirm" }).click();
-    await expect(page.getByText("You indicated this problem appears resolved")).toBeVisible();
+    await expect(page.getByText("You indicated this issue is resolved")).toBeVisible();
 
     // The same flag surfaces as the staff chip on the staff detail.
     await mockWorld(page, STAFF, world);

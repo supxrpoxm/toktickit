@@ -160,6 +160,12 @@ async function mockStaffTickets(page: Page) {
     const path = url.pathname;
     const method = route.request().method();
 
+    if (path === "/api/staff/tickets/101/actions" && method === "GET") {
+      return fulfill(route, 200, {
+        success: true,
+        data: { items: [], pagination: { page: 1, limit: 50, total: 0, totalPages: 1 } },
+      });
+    }
     if (path === "/api/staff/tickets/101/comments" && method === "GET") {
       return fulfill(route, 200, {
         success: true,

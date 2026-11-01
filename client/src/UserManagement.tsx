@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { UserRole, formatRoleDisplay, normalizeUserRole } from "./roles";
 import {
   AuthError,
   createManagedUser,
@@ -25,11 +26,16 @@ type DialogState =
   | { mode: "edit"; user: ManagedUser }
   | { mode: "password"; user: ManagedUser };
 
-const ROLE_OPTIONS = ["Requester", "IT Staff", "Administrator"] as const;
+const ROLE_OPTIONS = [
+  UserRole.REQUESTER,
+  UserRole.IT_STAFF,
+  UserRole.ADMINISTRATOR,
+].map(formatRoleDisplay) as [string, string, string];
 
 function roleBadgeStyle(role: string): React.CSSProperties {
-  if (role === "Administrator") return { backgroundColor: "#006B3C", color: "#fff" };
-  if (role === "IT Staff") return { backgroundColor: "#0B7A46", color: "#fff" };
+  const normalized = normalizeUserRole(role);
+  if (normalized === UserRole.ADMINISTRATOR) return { backgroundColor: "#006B3C", color: "#fff" };
+  if (normalized === UserRole.IT_STAFF) return { backgroundColor: "#0B7A46", color: "#fff" };
   return { backgroundColor: "#EAF6EF", color: "#006B3C", border: "1px solid #006B3C" };
 }
 
@@ -52,7 +58,7 @@ export default function UserManagement() {
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<string>("Requester");
+  const [role, setRole] = useState<string>(formatRoleDisplay(UserRole.REQUESTER));
   const [isActive, setIsActive] = useState(true);
   const [password, setPassword] = useState("");
   const [saving, setSaving] = useState(false);
@@ -98,7 +104,7 @@ export default function UserManagement() {
     if (next.mode === "create") {
       setName("");
       setEmail("");
-      setRole("Requester");
+      setRole(formatRoleDisplay(UserRole.REQUESTER));
       setIsActive(true);
     } else {
       setName(next.user.name);
@@ -343,7 +349,7 @@ export default function UserManagement() {
                         <td className="text-break">{user.email}</td>
                         <td>
                           <span className="badge rounded-pill" style={roleBadgeStyle(user.role)}>
-                            {user.role}
+                            {formatRoleDisplay(user.role)}
                           </span>
                         </td>
                         <td>
@@ -377,7 +383,7 @@ export default function UserManagement() {
                       <div className="d-flex justify-content-between align-items-center gap-2 mb-2">
                         <span className="fw-semibold text-break">{user.name}</span>
                         <span className="badge rounded-pill" style={roleBadgeStyle(user.role)}>
-                          {user.role}
+                          {formatRoleDisplay(user.role)}
                         </span>
                       </div>
                       <dl className="row small mb-2">
