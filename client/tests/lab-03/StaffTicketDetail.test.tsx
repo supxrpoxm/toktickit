@@ -210,8 +210,8 @@ describe("StaffTicketDetail (lab-03, Issue 4)", () => {
     expect(screen.getByRole("button", { name: "Claim this ticket" })).toBeInTheDocument();
     expect(screen.getByLabelText("IT Priority")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save priority" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Status workflow" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "In Progress" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Status")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save status" })).toBeInTheDocument();
 
     // Attachments continuity from Lab 2.
     expect(screen.getByText("evidence.png")).toBeInTheDocument();
@@ -260,7 +260,8 @@ describe("StaffTicketDetail (lab-03, Issue 4)", () => {
     renderDetail();
 
     expect(await screen.findByRole("heading", { name: "Cannot login to VPN" })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "In Progress" }));
+    await userEvent.selectOptions(screen.getByLabelText("Status"), "In Progress");
+    await userEvent.click(screen.getByRole("button", { name: "Save status" }));
 
     expect(await screen.findByText("Status changed to In Progress.")).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -272,7 +273,8 @@ describe("StaffTicketDetail (lab-03, Issue 4)", () => {
     render(<StaffTicketDetail ticketId={101} onBack={vi.fn()} />);
 
     expect(await screen.findByRole("heading", { name: "Cannot login to VPN" })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Cancelled" }));
+    await userEvent.selectOptions(screen.getByLabelText("Status"), "Cancelled");
+    await userEvent.click(screen.getByRole("button", { name: "Save status" }));
 
     // No request yet — the modal gates it.
     const dialog = await screen.findByRole("dialog");
@@ -293,7 +295,8 @@ describe("StaffTicketDetail (lab-03, Issue 4)", () => {
     render(<StaffTicketDetail ticketId={101} onBack={vi.fn()} />);
 
     expect(await screen.findByRole("heading", { name: "Cannot login to VPN" })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Cancelled" }));
+    await userEvent.selectOptions(screen.getByLabelText("Status"), "Closed");
+    await userEvent.click(screen.getByRole("button", { name: "Save status" }));
 
     const dialog = await screen.findByRole("dialog");
     await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
@@ -304,10 +307,10 @@ describe("StaffTicketDetail (lab-03, Issue 4)", () => {
     expect(seen).not.toContain("PATCH /api/staff/tickets/101/status");
   });
 
-  it("shows server-side transition errors inline with the allowed list", async () => {
+  it("shows illegal transitions inline with the allowed list", async () => {
     renderDetail({
       patchStatus: () => ({
-        status: 400,
+        status: 422,
         body: {
           success: false,
           error: {
@@ -320,7 +323,10 @@ describe("StaffTicketDetail (lab-03, Issue 4)", () => {
     });
 
     expect(await screen.findByRole("heading", { name: "Cannot login to VPN" })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "In Progress" }));
+    await userEvent.selectOptions(screen.getByLabelText("Status"), "Closed");
+    await userEvent.click(screen.getByRole("button", { name: "Save status" }));
+    // Confirm the destructive target first, then the API rejects it.
+    await userEvent.click(await screen.findByRole("button", { name: "Confirm change" }));
 
     expect(await screen.findByText(/Allowed: In Progress, Waiting for Requester, Cancelled/)).toBeInTheDocument();
   });

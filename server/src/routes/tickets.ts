@@ -11,7 +11,6 @@ import {
   getTickets,
   signalResolved,
 } from "../controllers/ticketsController.js";
-import { listRequesterActions } from "../controllers/actionsController.js";
 import { passwordChangeGate, requireAuth } from "../middleware/auth.js";
 
 const router = Router();
@@ -33,9 +32,6 @@ router.get("/:id/attachments", getAttachments);
 router.get("/:id/comments", requireAuth, passwordChangeGate, getPublicComments);
 router.post("/:id/comments", requireAuth, passwordChangeGate, createPublicComment);
 router.post("/:id/resolved-signal", requireAuth, passwordChangeGate, signalResolved);
-// Lab 4 (Issue 3) — read-only Actions Taken timeline for the owning Requester.
-// Write access stays on the staff router (IT Staff / Administrator only).
-router.get("/:id/actions", requireAuth, passwordChangeGate, listRequesterActions);
 router.get("/:id", getTicketById);
 router.get("/", getTickets);
 

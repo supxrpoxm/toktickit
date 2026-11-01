@@ -79,15 +79,9 @@ export default function StaffTicketQueue({ onOpenTicket }: StaffTicketQueueProps
 
   const [search, setSearch] = useState(searchParams.get("search") ?? "");
   const [statusFilter, setStatusFilter] = useState(searchParams.get("status") ?? "");
-  const [itPriorityFilter, setItPriorityFilter] = useState(
-    searchParams.get("itPriority") ?? searchParams.get("priority") ?? "",
-  );
-  const [anyPriority, setAnyPriority] = useState(
-    Boolean(searchParams.get("priority")) && !searchParams.get("itPriority"),
-  );
+  const [itPriorityFilter, setItPriorityFilter] = useState(searchParams.get("itPriority") ?? "");
   const [ownerFilter, setOwnerFilter] = useState(searchParams.get("owner") ?? "");
   const [categoryFilter, setCategoryFilter] = useState(searchParams.get("categoryId") ?? "");
-  const [departmentFilter, setDepartmentFilter] = useState(searchParams.get("department") ?? "");
   const [sort, setSort] = useState(searchParams.get("sort") ?? "updatedAt:desc");
   const [page, setPage] = useState(Number(searchParams.get("page")) || 1);
 
@@ -98,9 +92,7 @@ export default function StaffTicketQueue({ onOpenTicket }: StaffTicketQueueProps
   const [categories, setCategories] = useState<Category[]>([]);
   const [retryKey, setRetryKey] = useState(0);
 
-  const hasActiveFilters = Boolean(
-    search.trim() || statusFilter || itPriorityFilter || ownerFilter || categoryFilter || departmentFilter.trim(),
-  );
+  const hasActiveFilters = Boolean(search.trim() || statusFilter || itPriorityFilter || ownerFilter || categoryFilter);
 
   useEffect(() => {
     let cancelled = false;
@@ -125,11 +117,9 @@ export default function StaffTicketQueue({ onOpenTicket }: StaffTicketQueueProps
         const result = await fetchStaffQueue({
           search: search.trim() || undefined,
           status: statusFilter || undefined,
-          priority: anyPriority ? itPriorityFilter || undefined : undefined,
-          itPriority: anyPriority ? undefined : itPriorityFilter || undefined,
+          itPriority: itPriorityFilter || undefined,
           owner: ownerFilter || undefined,
           categoryId: categoryFilter || undefined,
-          department: departmentFilter.trim() || undefined,
           sort,
           page,
           limit: 10,
@@ -144,12 +134,9 @@ export default function StaffTicketQueue({ onOpenTicket }: StaffTicketQueueProps
         const next = new URLSearchParams();
         if (search.trim()) next.set("search", search.trim());
         if (statusFilter) next.set("status", statusFilter);
-        if (itPriorityFilter) {
-          next.set(anyPriority ? "priority" : "itPriority", itPriorityFilter);
-        }
+        if (itPriorityFilter) next.set("itPriority", itPriorityFilter);
         if (ownerFilter) next.set("owner", ownerFilter);
         if (categoryFilter) next.set("categoryId", categoryFilter);
-        if (departmentFilter.trim()) next.set("department", departmentFilter.trim());
         if (sort !== "updatedAt:desc") next.set("sort", sort);
         if (page !== 1) next.set("page", String(page));
         setSearchParams(next, { replace: true });
@@ -167,16 +154,14 @@ export default function StaffTicketQueue({ onOpenTicket }: StaffTicketQueueProps
     loadQueue();
     return () => abortController.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, statusFilter, itPriorityFilter, anyPriority, ownerFilter, categoryFilter, departmentFilter, sort, page, retryKey]);
+  }, [search, statusFilter, itPriorityFilter, ownerFilter, categoryFilter, sort, page, retryKey]);
 
   function clearFilters() {
     setSearch("");
     setStatusFilter("");
     setItPriorityFilter("");
-    setAnyPriority(false);
     setOwnerFilter("");
     setCategoryFilter("");
-    setDepartmentFilter("");
     setSort("updatedAt:desc");
     setPage(1);
   }
@@ -229,7 +214,7 @@ export default function StaffTicketQueue({ onOpenTicket }: StaffTicketQueueProps
                 className="form-select"
                 aria-label="Filter by IT priority"
                 value={itPriorityFilter}
-                onChange={(e) => { setAnyPriority(false); setItPriorityFilter(e.target.value); setPage(1); }}
+                onChange={(e) => { setItPriorityFilter(e.target.value); setPage(1); }}
               >
                 <option value="">All Priorities</option>
                 {QUEUE_PRIORITIES.map((priority) => (
@@ -263,17 +248,6 @@ export default function StaffTicketQueue({ onOpenTicket }: StaffTicketQueueProps
                   <option key={category.id} value={category.id}>{category.name}</option>
                 ))}
               </select>
-
-              <label className="visually-hidden" htmlFor="queue-department-filter">Filter by department</label>
-              <input
-                id="queue-department-filter"
-                type="text"
-                className="form-control"
-                aria-label="Filter by department"
-                placeholder="Department"
-                value={departmentFilter}
-                onChange={(e) => { setDepartmentFilter(e.target.value); setPage(1); }}
-              />
 
               <label className="visually-hidden" htmlFor="queue-sort">Sort tickets</label>
               <select

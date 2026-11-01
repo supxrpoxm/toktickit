@@ -106,59 +106,14 @@ export async function getTickets(req: Request, res: Response) {
     const validSortFields = ["createdAt", "status", "title", "priority", "id"];
     const safeSortBy = validSortFields.includes(sortBy) ? sortBy : "createdAt";
 
-    // Lab 4 (Issue 5) — keyword search plus status/priority/department
-    // filters. Unknown or empty values are ignored (never 500). Department is
-    // matched case-insensitively against the ticket's category or related
-    // system name, because the schema models departments as those labels.
-    const requestedPriority =
-      typeof req.query.requestedPriority === "string"
-        ? req.query.requestedPriority
-        : typeof req.query.priority === "string"
-          ? req.query.priority
-          : "";
-    const itPriority =
-      typeof req.query.itPriority === "string" ? req.query.itPriority : "";
-    const categoryId = toSafeNumber(req.query.categoryId);
-    const department =
-      typeof req.query.department === "string" ? req.query.department.trim() : "";
-
-    const validPriorities = ["Low", "Medium", "High"];
-    const validStatuses = [
-      "New",
-      "Open",
-      "In Progress",
-      "Waiting for Requester",
-      "Resolved",
-      "Closed",
-      "Cancelled",
-      "Reopened",
-    ];
-
     const where: any = {
       requesterId,
-      ...(validStatuses.includes(status) ? { status } : {}),
-      ...(validPriorities.includes(requestedPriority)
-        ? { priority: requestedPriority }
-        : {}),
-      ...(validPriorities.includes(itPriority) ? { itPriority } : {}),
-      ...(categoryId !== null ? { categoryId } : {}),
+      ...(status ? { status } : {}),
       ...(search
         ? {
           OR: [
             { title: { contains: search, mode: "insensitive" } },
             { description: { contains: search, mode: "insensitive" } },
-          ],
-        }
-        : {}),
-      ...(department
-        ? {
-          AND: [
-            {
-              OR: [
-                { category: { name: { contains: department, mode: "insensitive" } } },
-                { relatedSystem: { name: { contains: department, mode: "insensitive" } } },
-              ],
-            },
           ],
         }
         : {}),
@@ -623,46 +578,10 @@ export async function signalResolved(req: Request, res: Response) {
       });
     }
 
-    let advisoryNote: string | null = null;
-    if (req.body?.note !== undefined && req.body?.note !== null) {
-      if (typeof req.body.note !== "string") {
-        return res.status(400).json({
-          success: false,
-          error: {
-            code: "VALIDATION_ERROR",
-            message: "Please fix the highlighted fields.",
-            fields: { note: "The advisory note must be text." },
-          },
-        });
-      }
-      const trimmed = req.body.note.trim();
-      if (trimmed.length > 2000) {
-        return res.status(400).json({
-          success: false,
-          error: {
-            code: "VALIDATION_ERROR",
-            message: "Please fix the highlighted fields.",
-            fields: { note: "The advisory note must be at most 2000 characters." },
-          },
-        });
-      }
-      advisoryNote = trimmed.length > 0 ? trimmed : null;
-    }
-
     if (ticket.requesterResolved) {
-      if (advisoryNote) {
-        await prisma.publicComment.create({
-          data: { ticketId, authorId: authUser.id, body: advisoryNote },
-        });
-      }
       return res.status(200).json({
         success: true,
-        data: {
-          id: ticket.id,
-          requesterResolved: true,
-          requesterResolvedAt: ticket.requesterResolvedAt,
-          note: advisoryNote,
-        },
+        data: { id: ticket.id, requesterResolved: true, requesterResolvedAt: ticket.requesterResolvedAt },
       });
     }
 
@@ -671,21 +590,9 @@ export async function signalResolved(req: Request, res: Response) {
       data: { requesterResolved: true, requesterResolvedAt: new Date() },
       select: { id: true, status: true, requesterResolved: true, requesterResolvedAt: true },
     });
-
-    if (advisoryNote) {
-      await prisma.publicComment.create({
-        data: { ticketId, authorId: authUser.id, body: advisoryNote },
-      });
-    }
-
     return res.status(200).json({
       success: true,
-      data: {
-        id: updated.id,
-        requesterResolved: updated.requesterResolved,
-        requesterResolvedAt: updated.requesterResolvedAt,
-        note: advisoryNote,
-      },
+      data: { id: updated.id, requesterResolved: updated.requesterResolved, requesterResolvedAt: updated.requesterResolvedAt },
     });
   } catch (error) {
     return res.status(500).json({

@@ -27,9 +27,6 @@ const prisma = vi.hoisted(() => ({
   category: {
     findMany: vi.fn(),
   },
-  actionTaken: {
-    count: vi.fn(),
-  },
   publicComment: {
     findMany: vi.fn(),
     count: vi.fn(),
@@ -141,7 +138,6 @@ describe("Lab 3 staff ticket detail API (Issue 4)", () => {
       { id: 7, name: "IT Staff One", role: "IT_STAFF" },
       { id: 8, name: "IT Staff Two", role: "IT_STAFF" },
     ]);
-    prisma.actionTaken.count.mockResolvedValue(1);
   });
 
   it("returns the staff ticket with resolved flag and thread counts (AC-13–AC-16, AC-20)", async () => {
@@ -369,7 +365,7 @@ describe("Lab 3 staff ticket detail API (Issue 4)", () => {
     expect(response.body.data.updatedAt).toBeTruthy();
   });
 
-  it("rejects an illegal transition with 400 and the allowed list (AC-15)", async () => {
+  it("rejects an illegal transition with 422 and the allowed list (AC-15)", async () => {
     const cookie = await loginAs("staff1@company.com");
     prisma.ticket.findUnique.mockResolvedValue(staffTicket({ status: "Open" }));
 
@@ -378,7 +374,7 @@ describe("Lab 3 staff ticket detail API (Issue 4)", () => {
       .set("Cookie", cookie)
       .send({ status: "Closed" });
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(422);
     expect(response.body.error.code).toBe("INVALID_TRANSITION");
     expect(response.body.error.message).toContain("In Progress");
     expect(response.body.error.message).toContain("Waiting for Requester");
@@ -393,7 +389,7 @@ describe("Lab 3 staff ticket detail API (Issue 4)", () => {
       .patch("/api/staff/tickets/101/status")
       .set("Cookie", cookie)
       .send({ status: "New" });
-    expect(backwards.status).toBe(400);
+    expect(backwards.status).toBe(422);
 
     const unknown = await request(app)
       .patch("/api/staff/tickets/101/status")
@@ -409,16 +405,15 @@ describe("Lab 3 staff ticket detail API (Issue 4)", () => {
     expect(prisma.ticket.update).not.toHaveBeenCalled();
   });
 
-  it("walks the full lifecycle with an Actions-Taken gate (AC-15)", async () => {
+  it("walks the full lifecycle without an Actions-Taken gate (AC-15)", async () => {
     const cookie = await loginAs("staff1@company.com");
     const chain: Array<[string, string]> = [
       ["New", "Open"],
       ["Open", "In Progress"],
       ["In Progress", "Resolved"],
-      ["Resolved", "Reopened"],
-      ["Reopened", "In Progress"],
-      ["In Progress", "Resolved"],
       ["Resolved", "Closed"],
+      ["Closed", "Reopened"],
+      ["Reopened", "Open"],
     ];
     for (const [from, to] of chain) {
       prisma.ticket.findUnique.mockResolvedValueOnce(staffTicket({ status: from }));

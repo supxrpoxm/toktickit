@@ -1,12 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { roleToLabel } from "../auth.js";
 import { passwordChangeGate, requireAuth, requireStaff } from "../middleware/auth.js";
-import {
-  createAction,
-  listActions,
-  updateAction,
-} from "../controllers/actionsController.js";
-import { getStaffDashboard } from "../controllers/dashboardController.js";
 import { getPrisma } from "../prisma.js";
 import {
   allowedTransitions,
@@ -16,8 +10,6 @@ import {
   isValidTransition,
   isWorkflowStatus,
   notFoundError,
-  resolutionGateError,
-  staleTicketError,
   toEntryItem,
   toSafeInt,
   validationError,
@@ -106,28 +98,8 @@ function queueWhere(query: Request["query"], sessionUserId: number): Record<stri
     if (ownerId !== null && ownerId > 0) and.push({ ownerId });
   }
 
-  // Lab 4 (Issue 5) — a single priority filter matching either the requested
-  // or IT priority, so "show me High priority work" never misses tickets.
-  const priority = typeof query.priority === "string" ? query.priority : "all";
-  if ((PRIORITIES as readonly string[]).includes(priority)) {
-    and.push({ OR: [{ priority }, { itPriority: priority }] });
-  }
-
   const categoryId = toSafeInt(query.categoryId);
   if (categoryId !== null && categoryId > 0) and.push({ categoryId });
-
-  // Department maps to the category or related-system label; both are stored
-  // as free-text names in the schema, so match case-insensitively.
-  const department =
-    typeof query.department === "string" ? query.department.trim().slice(0, 100) : "";
-  if (department) {
-    and.push({
-      OR: [
-        { category: { name: { contains: department, mode: "insensitive" } } },
-        { relatedSystem: { name: { contains: department, mode: "insensitive" } } },
-      ],
-    });
-  }
 
   return and.length > 0 ? { AND: and } : {};
 }
@@ -180,9 +152,6 @@ function toQueueItem(ticket: {
     updatedAt: ticket.updatedAt,
   };
 }
-
-// GET /api/staff/dashboard — Lab 4 (Issue 5) operational summary.
-router.get("/dashboard", getStaffDashboard);
 
 // GET /api/staff/tickets — shared queue with search, filters, sort,
 // pagination. Invalid query values fall back to defaults (BR-22).
@@ -297,18 +266,6 @@ router.get("/tickets/:id", async (req: Request, res: Response) => {
     });
   }
 });
-
-// ---------------------------------------------------------------------------
-// Lab 4 (Issue 2) — Actions Taken.
-//
-// The router-level requireAuth -> passwordChangeGate -> requireStaff gate
-// above means only IT Staff and Administrators can list, create, or update
-// actions. Requesters receive 403 FORBIDDEN with no action payload.
-// PATCH is version-checked for safe conflict handling.
-// ---------------------------------------------------------------------------
-router.get("/tickets/:id/actions", listActions);
-router.post("/tickets/:id/actions", createAction);
-router.patch("/tickets/:id/actions/:actionId", updateAction);
 
 // GET /api/staff/users — assignable owner candidates: active IT Staff and
 // Administrator users (BR-15). Powers the detail-screen owner select so
@@ -432,12 +389,8 @@ router.patch("/tickets/:id/priority", async (req: Request, res: Response) => {
 
 // PATCH /api/staff/tickets/:id/status — permitted status change per the
 // transition matrix (BR-17, AC-15). Unknown status -> 400; illegal
-// transition -> 400 with the allowed list. Requesters cannot reach this
+// transition -> 422 with the allowed list. Requesters cannot reach this
 // route at all (router gate -> 403, AC-16).
-//
-// Lab 4 (Issue 4): `updatedAt` is an optional optimistic-concurrency token.
-// When supplied and stale, the write is rejected with 409 before the update.
-// Resolving requires at least one recorded Action Taken.
 router.patch("/tickets/:id/status", async (req: Request, res: Response) => {
   try {
     const ticketId = toSafeInt(req.params.id);
@@ -452,35 +405,12 @@ router.patch("/tickets/:id/status", async (req: Request, res: Response) => {
       );
     }
 
-    let expectedUpdatedAt: Date | null = null;
-    const rawUpdatedAt = req.body?.updatedAt;
-    if (rawUpdatedAt !== undefined && rawUpdatedAt !== null) {
-      const parsed =
-        rawUpdatedAt instanceof Date
-          ? rawUpdatedAt
-          : typeof rawUpdatedAt === "string" || typeof rawUpdatedAt === "number"
-            ? new Date(rawUpdatedAt)
-            : null;
-      if (!parsed || Number.isNaN(parsed.getTime())) {
-        return res.status(400).json(
-          validationError("The ticket version is invalid.", {
-            updatedAt: "Send the ticket's updatedAt timestamp from the latest response.",
-          }),
-        );
-      }
-      expectedUpdatedAt = parsed;
-    }
-
     const prisma = getPrisma();
     const ticket = await prisma.ticket.findUnique({
       where: { id: ticketId },
       select: { id: true, status: true, updatedAt: true },
     });
     if (!ticket) return res.status(404).json(notFoundError());
-
-    if (expectedUpdatedAt && ticket.updatedAt.getTime() !== expectedUpdatedAt.getTime()) {
-      return res.status(409).json(staleTicketError(ticket));
-    }
 
     if (ticket.status === next) {
       return res.status(200).json({
@@ -491,7 +421,7 @@ router.patch("/tickets/:id/status", async (req: Request, res: Response) => {
 
     if (!isValidTransition(ticket.status, next)) {
       const allowed = allowedTransitions(ticket.status);
-      return res.status(400).json({
+      return res.status(422).json({
         success: false,
         error: {
           code: "INVALID_TRANSITION",
@@ -502,11 +432,6 @@ router.patch("/tickets/:id/status", async (req: Request, res: Response) => {
           fields: { status: `Allowed transitions from ${ticket.status}: ${allowed.join(", ") || "none"}.` },
         },
       });
-    }
-
-    if (next === "Resolved") {
-      const actionCount = await prisma.actionTaken.count({ where: { ticketId } });
-      if (actionCount < 1) return res.status(409).json(resolutionGateError(actionCount));
     }
 
     const updated = await prisma.ticket.update({

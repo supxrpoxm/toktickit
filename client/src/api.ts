@@ -1,15 +1,3 @@
-import { UserRole } from "./roles";
-
-export {
-  USER_ROLE_DISPLAY,
-  USER_ROLE_VALUES,
-  UserRole,
-  formatRoleDisplay,
-  isAdministratorRole,
-  isStaffRole,
-  normalizeUserRole,
-} from "./roles";
-
 // Use an explicit backend URL to avoid connection issues from the dev client
 const API_URL = "http://localhost:3000";
 
@@ -70,6 +58,8 @@ export async function fetchActiveRequesters(): Promise<Requester[]> {
 // Vite /api proxy). No password, hash, or token is ever kept in JS storage.
 // ---------------------------------------------------------------------------
 
+export type UserRole = "Requester" | "IT Staff" | "Administrator";
+
 export interface AuthUser {
   id: number;
   name: string;
@@ -84,78 +74,19 @@ export class AuthError extends Error {
   code: string;
   status: number;
   fields?: Record<string, string>;
-  conflict?: unknown;
 
-  constructor(
-    status: number,
-    code: string,
-    message: string,
-    fields?: Record<string, string>,
-    conflict?: unknown,
-  ) {
+  constructor(status: number, code: string, message: string, fields?: Record<string, string>) {
     super(message);
     this.name = "AuthError";
     this.status = status;
     this.code = code;
     this.fields = fields;
-    this.conflict = conflict;
   }
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
-function parseFieldErrors(value: unknown): Record<string, string> | undefined {
-  const record = asRecord(value);
-  if (!record) return undefined;
-
-  const fields: Record<string, string> = {};
-  for (const [key, message] of Object.entries(record)) {
-    if (typeof message === "string" && message.trim()) fields[key] = message;
-  }
-  return Object.keys(fields).length > 0 ? fields : undefined;
-}
-
-type ParsedApiError = {
-  code: string;
-  message: string;
-  fields?: Record<string, string>;
-  conflict?: unknown;
-};
-
-// Parse the standard backend envelope safely. The fallbacks also tolerate
-// legacy/unexpected shapes such as `{ message }` or `{ fieldErrors }` without
-// throwing, so the UI can always show a safe message.
-function parseApiError(body: unknown, status: number): ParsedApiError {
-  const root = asRecord(body);
-  const nested = asRecord(root?.error);
-
-  const code =
-    (typeof nested?.code === "string" && nested.code) ||
-    (typeof root?.code === "string" && root.code) ||
-    (status === 401 ? "UNAUTHENTICATED" : "INTERNAL_ERROR");
-
-  const message =
-    (typeof nested?.message === "string" && nested.message) ||
-    (typeof root?.message === "string" && root.message) ||
-    "Something went wrong. Please try again.";
-
-  const fields =
-    parseFieldErrors(nested?.fields) ??
-    parseFieldErrors(nested?.fieldErrors) ??
-    parseFieldErrors(root?.fieldErrors) ??
-    parseFieldErrors(root?.fields);
-
-  return {
-    code,
-    message,
-    fields,
-    conflict: nested?.conflict ?? root?.conflict,
-  };
-}
+type AuthEnvelope<T> =
+  | { success: true; data: T }
+  | { success: false; error: { code: string; message: string; fields?: Record<string, string> } };
 
 async function authRequest<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
@@ -165,20 +96,26 @@ async function authRequest<T>(path: string, init?: RequestInit): Promise<T> {
     throw new AuthError(0, "NETWORK_ERROR", "Unable to reach the server. Please try again.");
   }
 
-  let body: unknown;
+  let body: AuthEnvelope<T>;
   try {
-    body = await response.json();
+    body = (await response.json()) as AuthEnvelope<T>;
   } catch {
     throw new AuthError(response.status, "NETWORK_ERROR", "Unable to reach the server. Please try again.");
   }
 
-  const envelope = asRecord(body);
-  if (!response.ok || !envelope || envelope.success !== true) {
-    const error = parseApiError(body, response.status);
-    throw new AuthError(response.status, error.code, error.message, error.fields, error.conflict);
+  if (!response.ok || !body.success) {
+    const fallback: { code: string; message: string; fields?: Record<string, string> } = {
+      code: response.status === 401 ? "UNAUTHENTICATED" : "INTERNAL_ERROR",
+      message: "Something went wrong. Please try again.",
+    };
+    const error =
+      !body.success && typeof body.error === "object" && body.error !== null
+        ? (body.error as { code: string; message: string; fields?: Record<string, string> })
+        : fallback;
+    throw new AuthError(response.status, error.code, error.message, error.fields);
   }
 
-  return envelope.data as T;
+  return (body as { success: true; data: T }).data;
 }
 
 export async function login(email: string, password: string): Promise<AuthUser> {
@@ -240,12 +177,10 @@ export interface QueuePagination {
 export interface QueueParams {
   search?: string;
   status?: string;
-  priority?: string;
   itPriority?: string;
   requestedPriority?: string;
   owner?: string;
   categoryId?: string;
-  department?: string;
   sort?: string;
   page?: number;
   limit?: number;
@@ -255,12 +190,10 @@ export async function fetchStaffQueue(params: QueueParams): Promise<{ items: Que
   const query = new URLSearchParams();
   if (params.search?.trim()) query.set("search", params.search.trim());
   if (params.status) query.set("status", params.status);
-  if (params.priority) query.set("priority", params.priority);
   if (params.itPriority) query.set("itPriority", params.itPriority);
   if (params.requestedPriority) query.set("requestedPriority", params.requestedPriority);
   if (params.owner) query.set("owner", params.owner);
   if (params.categoryId) query.set("categoryId", params.categoryId);
-  if (params.department?.trim()) query.set("department", params.department.trim());
   if (params.sort) query.set("sort", params.sort);
   query.set("page", String(params.page ?? 1));
   query.set("limit", String(params.limit ?? 10));
@@ -336,15 +269,11 @@ export async function updateItPriority(id: number, itPriority: string): Promise<
   });
 }
 
-export async function updateTicketStatus(
-  id: number,
-  status: string,
-  updatedAt?: string,
-): Promise<{ id: number; status: string; updatedAt: string }> {
+export async function updateTicketStatus(id: number, status: string): Promise<{ id: number; status: string; updatedAt: string }> {
   return authRequest(`/api/staff/tickets/${id}/status`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(updatedAt ? { status, updatedAt } : { status }),
+    body: JSON.stringify({ status }),
   });
 }
 
@@ -402,183 +331,8 @@ export async function postTicketComment(id: number, body: string): Promise<Ticke
   });
 }
 
-export async function signalProblemResolved(
-  id: number,
-  note?: string,
-): Promise<{ id: number; requesterResolved: boolean; requesterResolvedAt: string | null }> {
-  return authRequest(`/api/tickets/${id}/resolved-signal`, {
-    method: "POST",
-    headers: note !== undefined ? { "Content-Type": "application/json" } : undefined,
-    body: note !== undefined ? JSON.stringify({ note }) : undefined,
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Lab 4 (Issue 3) — Actions Taken timeline.
-// Requesters read their own ticket's timeline through /api/tickets/:id/actions;
-// IT Staff / Administrators use the staff endpoint for read + write.
-// ---------------------------------------------------------------------------
-
-export interface ActionTakenItem {
-  id: number;
-  ticketId: number;
-  ticketNumber: string;
-  actionAt: string;
-  description: string;
-  result: string;
-  performedBy: { id: number; name: string; role: string };
-  followUpRequired: boolean;
-  followUpNote: string | null;
-  attachmentNotes: string | null;
-  version: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface ActionTakenList {
-  items: ActionTakenItem[];
-  pagination: QueuePagination;
-}
-
-export interface ActionTakenInput {
-  actionAt: string;
-  description: string;
-  result: string;
-  followUpRequired: boolean;
-  followUpNote: string | null;
-  attachmentNotes: string | null;
-}
-
-export type ActionTakenUpdateInput = Partial<ActionTakenInput> & { version: number };
-
-export async function fetchActionsTaken(
-  ticketId: number,
-  scope: "staff" | "requester",
-): Promise<ActionTakenList> {
-  const base =
-    scope === "staff"
-      ? `/api/staff/tickets/${ticketId}/actions`
-      : `/api/tickets/${ticketId}/actions`;
-  return authRequest<ActionTakenList>(`${base}?limit=50&sort=newest`);
-}
-
-export async function createActionTaken(
-  ticketId: number,
-  body: ActionTakenInput,
-): Promise<ActionTakenItem> {
-  return authRequest<ActionTakenItem>(`/api/staff/tickets/${ticketId}/actions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
-export async function updateActionTaken(
-  ticketId: number,
-  actionId: number,
-  body: ActionTakenUpdateInput,
-): Promise<ActionTakenItem> {
-  return authRequest<ActionTakenItem>(`/api/staff/tickets/${ticketId}/actions/${actionId}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Lab 4 (Issue 5) — role-scoped dashboards. Both endpoints are pull/refetch
-// read models; `generatedAt` lets the header show data freshness.
-// ---------------------------------------------------------------------------
-
-export type DashboardWindow = "7d" | "30d" | "all";
-
-export interface DashboardTicketItem {
-  id: number;
-  ticketNumber: string;
-  title: string;
-  status: string;
-  requestedPriority: string;
-  itPriority: string | null;
-  owner: QueueOwner | null;
-  requester?: { id: number; name: string };
-  requesterResolved?: boolean;
-  category: string | null;
-  relatedSystem?: string | null;
-  incompleteActionCount?: number;
-  overdueActionCount?: number;
-  attentionReasons?: string[];
-  updatedAt: string;
-}
-
-export interface DashboardActionItem {
-  id: number;
-  ticketId: number;
-  ticketNumber: string;
-  ticketTitle: string;
-  summary: string;
-  details: string;
-  status: string;
-  performedBy: { id: number; name: string; role: string };
-  dueAt: string | null;
-  completedAt: string | null;
-  updatedAt: string;
-  description?: string;
-  result?: string;
-  followUpRequired?: boolean;
-}
-
-export interface StaffDashboardSummary {
-  myOpenTickets: number;
-  unassignedTickets: number;
-  inProgressTickets: number;
-  waitingForRequester: number;
-  requesterResolvedTickets: number;
-  incompleteActions: number;
-  overdueActions: number;
-}
-
-export interface StaffDashboardData {
-  summary: StaffDashboardSummary;
-  myWork: DashboardTicketItem[];
-  unassigned: DashboardTicketItem[];
-  attention: DashboardTicketItem[];
-  recentActions: DashboardActionItem[];
-  generatedAt: string;
-}
-
-export interface RequesterDashboardSummary {
-  totalTickets: number;
-  openTickets: number;
-  inProgressTickets: number;
-  waitingForRequester: number;
-  resolvedTickets: number;
-  closedTickets: number;
-  cancelledTickets: number;
-}
-
-export interface RequesterDashboardData {
-  summary: RequesterDashboardSummary;
-  recentTickets: DashboardTicketItem[];
-  latestActions: DashboardActionItem[];
-  needsAttention: DashboardTicketItem[];
-  generatedAt: string;
-}
-
-export async function fetchStaffDashboard(
-  params: { window?: DashboardWindow; limit?: number } = {},
-): Promise<StaffDashboardData> {
-  const query = new URLSearchParams();
-  if (params.window) query.set("window", params.window);
-  query.set("limit", String(params.limit ?? 5));
-  return authRequest<StaffDashboardData>(`/api/staff/dashboard?${query.toString()}`);
-}
-
-export async function fetchRequesterDashboard(
-  params: { limit?: number } = {},
-): Promise<RequesterDashboardData> {
-  const query = new URLSearchParams();
-  query.set("limit", String(params.limit ?? 5));
-  return authRequest<RequesterDashboardData>(`/api/requester/dashboard?${query.toString()}`);
+export async function signalProblemResolved(id: number): Promise<{ id: number; requesterResolved: boolean; requesterResolvedAt: string | null }> {
+  return authRequest(`/api/tickets/${id}/resolved-signal`, { method: "POST" });
 }
 
 export async function fetchCategories(): Promise<Category[]> {

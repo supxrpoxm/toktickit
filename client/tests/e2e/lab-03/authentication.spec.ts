@@ -164,7 +164,7 @@ test.describe("lab-03 authentication (E-01)", () => {
 
     await expect(page.getByRole("heading", { name: "My Tickets" })).toBeVisible();
     await expect(page.getByText("Alice Johnson")).toBeVisible();
-    await expect(page.getByText("Requester", { exact: true })).toBeVisible();
+    await expect(page.getByText("Requester")).toBeVisible();
     await expect(page.getByRole("button", { name: "Logout" })).toBeVisible();
     // Lab 2 selector is gone.
     await expect(page.getByRole("heading", { name: "Select Requester" })).not.toBeVisible();
