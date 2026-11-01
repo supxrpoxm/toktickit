@@ -16,6 +16,8 @@ Issue 5: Search, Filter & Role-Based Dashboards - [https://github.com/supxrpoxm/
 
 Issue 6: Final Hardening, Full Regression, and Release Integration - [https://github.com/supxrpoxm/toktickit/pull/54]
 
+Issue 7: Fix Screenshot Directory Structure & Capture Missing Actions Taken Evidence - [https://github.com/supxrpoxm/toktickit/pull/56]
+
 Test Accounts
 Administrator: admin@toktickit.com / Password123!
 

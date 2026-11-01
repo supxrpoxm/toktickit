@@ -200,7 +200,7 @@ test.describe("Lab 4 dashboards", () => {
         await expect(page.locator(".staff-dashboard-table").first()).toBeHidden();
       }
       await page.screenshot({
-        path: `../artifacts/lab-04/screenshots/staff-dashboard-${viewport.name}.png`,
+        path: `../artifacts/lab-04/screenshots/staff-dashboard/staff-dashboard-${viewport.name}.png`,
         fullPage: true,
       });
     }
@@ -221,7 +221,7 @@ test.describe("Lab 4 dashboards", () => {
         await expect(page.locator(".requester-dashboard-table").first()).toBeHidden();
       }
       await page.screenshot({
-        path: `../artifacts/lab-04/screenshots/requester-dashboard-${viewport.name}.png`,
+        path: `../artifacts/lab-04/screenshots/requester-dashboard/requester-dashboard-${viewport.name}.png`,
         fullPage: true,
       });
     }
@@ -234,7 +234,7 @@ test.describe("Lab 4 dashboards", () => {
     await expect(page.locator(".staff-queue-cards article")).toHaveCount(5);
     await expectNoHorizontalOverflow(page);
     await page.screenshot({
-      path: "../artifacts/lab-04/screenshots/staff-queue-mobile.png",
+      path: "../artifacts/lab-04/screenshots/staff-dashboard/staff-queue-mobile.png",
       fullPage: true,
     });
 
@@ -243,7 +243,7 @@ test.describe("Lab 4 dashboards", () => {
     await expect(page.getByRole("heading", { name: "Actions Taken" })).toBeVisible();
     await expectNoHorizontalOverflow(page);
     await page.screenshot({
-      path: "../artifacts/lab-04/screenshots/requester-ticket-mobile.png",
+      path: "../artifacts/lab-04/screenshots/requester-dashboard/requester-ticket-mobile.png",
       fullPage: true,
     });
   });
